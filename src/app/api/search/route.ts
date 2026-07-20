@@ -4,13 +4,6 @@ import { NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
-import {
-  isSiteCircuitOpenError,
-  mapWithConcurrency,
-  SEARCH_SITE_CONCURRENCY,
-  withSiteCircuitBreaker,
-  withTimeout,
-} from '@/lib/search-resilience';
 
 
 export const runtime = 'edge';
@@ -36,35 +29,25 @@ export async function GET(request: Request) {
 
   const config = await getConfig();
   const apiSites = config.SourceConfig.filter((site) => !site.disabled);
+  // 添加超时控制和错误处理，避免慢接口拖累整体响应
+  const searchPromises = apiSites.map((site) =>
+    Promise.race([
+      searchFromApi(site, query, config.SiteConfig.SearchDownstreamMaxPage),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`${site.name} timeout`)), 20000)
+      ),
+    ]).catch((err) => {
+      console.warn(`搜索失败 ${site.name}:`, err.message);
+      return []; // 返回空数组而不是抛出错误
+    })
+  );
+
   try {
-    const results = await mapWithConcurrency(
-      apiSites,
-      SEARCH_SITE_CONCURRENCY,
-      async (site) => {
-        try {
-          return await withSiteCircuitBreaker(site.key, () =>
-            withTimeout(
-              searchFromApi(
-                site,
-                query,
-                config.SiteConfig.SearchDownstreamMaxPage
-              ),
-              20000,
-              `${site.name} timeout`
-            )
-          );
-        } catch (error) {
-          if (!isSiteCircuitOpenError(error)) {
-            console.warn(
-              `搜索失败 ${site.name}:`,
-              error instanceof Error ? error.message : error
-            );
-          }
-          return [];
-        }
-      }
-    );
-    const flattenedResults = results.flat();
+    const results = await Promise.allSettled(searchPromises);
+    const successResults = results
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => (result as PromiseFulfilledResult<any>).value);
+    let flattenedResults = successResults.flat();
     
     const cacheTime = config.SiteConfig.SiteInterfaceCacheTime || 7200;
 

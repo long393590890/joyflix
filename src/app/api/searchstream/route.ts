@@ -2,13 +2,6 @@
 
 import { getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
-import {
-  isSiteCircuitOpenError,
-  mapWithConcurrency,
-  SEARCH_SITE_CONCURRENCY,
-  withSiteCircuitBreaker,
-  withTimeout,
-} from '@/lib/search-resilience';
 import { SearchResult } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -33,36 +26,28 @@ export async function GET(request: Request) {
 
       const processSite = async (site: (typeof apiSites)[0]) => {
         try {
-          const results: SearchResult[] = await withSiteCircuitBreaker(
-            site.key,
-            () =>
-              withTimeout(
-                searchFromApi(
-                  site,
-                  query,
-                  config.SiteConfig.SearchDownstreamMaxPage
-                ),
-                20000,
-                `${site.name} timeout`
-              )
-          );
+          const results: SearchResult[] = await Promise.race([
+            searchFromApi(
+              site,
+              query,
+              config.SiteConfig.SearchDownstreamMaxPage
+            ),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`${site.name} timeout`)), 20000)
+            ),
+          ]);
 
           if (results && results.length > 0) {
             const chunk = encoder.encode(JSON.stringify(results) + '\n');
             controller.enqueue(chunk);
           }
         } catch (err: any) {
-          if (!isSiteCircuitOpenError(err)) {
-            console.warn(`搜索失败 ${site.name}:`, err.message);
-          }
+          console.warn(`搜索失败 ${site.name}:`, err.message);
         }
       };
 
-      await mapWithConcurrency(
-        apiSites,
-        SEARCH_SITE_CONCURRENCY,
-        processSite
-      );
+      const allPromises = apiSites.map(processSite);
+      await Promise.all(allPromises);
       controller.close();
     },
   });

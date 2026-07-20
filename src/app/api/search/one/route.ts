@@ -2,11 +2,6 @@ import { NextResponse } from 'next/server';
 
 import { getCacheTime, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
-import {
-  isSiteCircuitOpenError,
-  withSiteCircuitBreaker,
-  withTimeout,
-} from '@/lib/search-resilience';
 
 
 export const runtime = 'edge';
@@ -48,13 +43,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const results = await withSiteCircuitBreaker(targetSite.key, () =>
-      withTimeout(
-        searchFromApi(targetSite, query),
-        20000,
-        `${targetSite.name} timeout`
-      )
-    );
+    const results = await searchFromApi(targetSite, query);
     let result = results.filter((r) => r.title === query);
     
     const cacheTime = await getCacheTime();
@@ -81,13 +70,12 @@ export async function GET(request: Request) {
       );
     }
   } catch (error) {
-    const circuitOpen = isSiteCircuitOpenError(error);
     return NextResponse.json(
       {
-        error: circuitOpen ? '资源站暂时不可用，请稍后重试' : '搜索失败',
+        error: '搜索失败',
         result: null,
       },
-      { status: circuitOpen ? 503 : 500 }
+      { status: 500 }
     );
   }
 }
