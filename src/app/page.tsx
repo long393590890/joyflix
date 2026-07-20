@@ -33,6 +33,13 @@ import { useSite } from '@/components/SiteProvider';
 import VideoCard from '@/components/VideoCard';
 import VideoCardSkeleton from '@/components/VideoCardSkeleton';
 
+type RecommendationSection =
+  | 'movies'
+  | 'tvShows'
+  | 'bangumi'
+  | 'varietyShows'
+  | 'customCategory';
+
 function HomeClient() {
   const { mainContainerRef } = useSite();
   const router = useRouter();
@@ -48,7 +55,16 @@ function HomeClient() {
   const [bangumiCalendarData, setBangumiCalendarData] = useState<
     BangumiCalendarData[]
   >([]);
-  const [loading, setLoading] = useState(true);
+  const [recommendationLoading, setRecommendationLoading] = useState<
+    Record<RecommendationSection, boolean>
+  >({
+    movies: true,
+    tvShows: true,
+    bangumi: true,
+    varietyShows: true,
+    customCategory: true,
+  });
+  const [favoritesLoading, setFavoritesLoading] = useState(true);
   const { announcement } = useSite();
 
   const [showAnnouncement, setShowAnnouncement] = useState(false);
@@ -88,54 +104,60 @@ function HomeClient() {
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
 
   useEffect(() => {
-    const fetchRecommendData = async () => {
+    const loadSection = async (
+      section: RecommendationSection,
+      request: () => Promise<void>
+    ) => {
       try {
-        setLoading(true);
+        await request();
+      } catch (error) {
+        console.error(`获取推荐栏目 ${section} 失败:`, error);
+      } finally {
+        setRecommendationLoading((current) => ({
+          ...current,
+          [section]: false,
+        }));
+      }
+    };
 
-        // 并行获取热门电影、热门剧集和热门综艺
-        const [moviesData, tvShowsData, varietyShowsData, bangumiCalendarData] =
-          await Promise.all([
-            getDoubanCategories({
-              kind: 'movie',
-              category: '热门',
-              type: '全部',
-            }),
-            getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
-            getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
-            GetBangumiCalendarData(),
-          ]);
-
-        if (moviesData.code === 200) {
-          setHotMovies(moviesData.list);
-        }
-
-        if (tvShowsData.code === 200) {
-          setHotTvShows(tvShowsData.list);
-        }
-
-        if (varietyShowsData.code === 200) {
-          setHotVarietyShows(varietyShowsData.list);
-        }
-        setBangumiCalendarData(bangumiCalendarData);
-
-        // 获取自定义分类数据：电影 - 华语
-        const customCategoryData = await getDoubanList({
+    void Promise.all([
+      loadSection('movies', async () => {
+        const data = await getDoubanCategories({
+          kind: 'movie',
+          category: '热门',
+          type: '全部',
+        });
+        if (data.code === 200) setHotMovies(data.list);
+      }),
+      loadSection('tvShows', async () => {
+        const data = await getDoubanCategories({
+          kind: 'tv',
+          category: 'tv',
+          type: 'tv',
+        });
+        if (data.code === 200) setHotTvShows(data.list);
+      }),
+      loadSection('bangumi', async () => {
+        setBangumiCalendarData(await GetBangumiCalendarData());
+      }),
+      loadSection('varietyShows', async () => {
+        const data = await getDoubanCategories({
+          kind: 'tv',
+          category: 'show',
+          type: 'show',
+        });
+        if (data.code === 200) setHotVarietyShows(data.list);
+      }),
+      loadSection('customCategory', async () => {
+        const data = await getDoubanList({
           tag: '华语',
           type: 'movie',
           pageLimit: 25,
           pageStart: 0,
         });
-        if (customCategoryData.code === 200) {
-          setHotCustomCategory(customCategoryData.list);
-        }
-      } catch (error) {
-        console.error('获取推荐数据失败:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRecommendData();
+        if (data.code === 200) setHotCustomCategory(data.list);
+      }),
+    ]);
   }, []);
 
   // 处理收藏数据更新的函数
@@ -175,11 +197,18 @@ function HomeClient() {
     if (activeTab !== 'favorites') return;
 
     const loadFavorites = async () => {
-      const allFavorites = await getAllFavorites();
-      await updateFavoriteItems(allFavorites);
+      setFavoritesLoading(true);
+      try {
+        const allFavorites = await getAllFavorites();
+        await updateFavoriteItems(allFavorites);
+      } catch (error) {
+        console.error('获取收藏数据失败:', error);
+      } finally {
+        setFavoritesLoading(false);
+      }
     };
 
-    loadFavorites();
+    void loadFavorites();
 
     // 监听收藏更新事件
     const unsubscribe = subscribeToDataUpdates(
@@ -235,7 +264,7 @@ function HomeClient() {
                 )}
               </div>
               <div className='justify-start grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'>
-                {loading ? (
+                {favoritesLoading ? (
                   // 加载状态显示灰色占位数据
                   Array.from({ length: 12 }).map((_, index) => (
                     <VideoCardSkeleton
@@ -254,7 +283,7 @@ function HomeClient() {
                     />
                   </div>
                 ))}
-                {!loading && favoriteItems.length === 0 && (
+                {!favoritesLoading && favoriteItems.length === 0 && (
                   <div className='col-span-full text-center text-gray-500 py-8 dark:text-gray-400'>
                     暂无收藏
                   </div>
@@ -282,7 +311,7 @@ function HomeClient() {
                   </h2>
                 </div>
                 <ScrollableRow>
-                  {loading
+                  {recommendationLoading.movies
                     ? // 加载状态显示灰色占位数据
                       Array.from({ length: 8 }).map((_, index) => (
                         <VideoCardSkeleton
@@ -326,7 +355,7 @@ function HomeClient() {
                   </h2>
                 </div>
                 <ScrollableRow>
-                  {loading
+                  {recommendationLoading.tvShows
                     ? // 加载状态显示灰色占位数据
                       Array.from({ length: 8 }).map((_, index) => (
                         <VideoCardSkeleton
@@ -369,7 +398,7 @@ function HomeClient() {
                   </h2>
                 </div>
                 <ScrollableRow>
-                  {loading
+                  {recommendationLoading.bangumi
                     ? // 加载状态显示灰色占位数据
                       Array.from({ length: 8 }).map((_, index) => (
                         <VideoCardSkeleton
@@ -440,7 +469,7 @@ function HomeClient() {
                   </h2>
                 </div>
                 <ScrollableRow>
-                  {loading
+                  {recommendationLoading.varietyShows
                     ? // 加载状态显示灰色占位数据
                       Array.from({ length: 8 }).map((_, index) => (
                         <VideoCardSkeleton
@@ -483,7 +512,7 @@ function HomeClient() {
                   </h2>
                 </div>
                 <ScrollableRow>
-                  {loading
+                  {recommendationLoading.customCategory
                     ? // 加载状态显示灰色占位数据
                       Array.from({ length: 8 }).map((_, index) => (
                         <VideoCardSkeleton
