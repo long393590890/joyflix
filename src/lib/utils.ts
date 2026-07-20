@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,no-console */
 import he from 'he';
-import Hls from 'hls.js';
 
 function getDoubanImageProxyConfig(): {
   proxyType:

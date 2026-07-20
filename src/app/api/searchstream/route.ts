@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,no-console */
 
-import { getCacheTime, getConfig } from '@/lib/config';
+import { getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
 import { SearchResult } from '@/lib/types';
 
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   const config = await getConfig();
   const apiSites = config.SourceConfig.filter((site) => !site.disabled);
-  const cacheTime = await getCacheTime();
+  const cacheTime = config.SiteConfig.SiteInterfaceCacheTime || 7200;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -27,7 +27,11 @@ export async function GET(request: Request) {
       const processSite = async (site: (typeof apiSites)[0]) => {
         try {
           const results: SearchResult[] = await Promise.race([
-            searchFromApi(site, query),
+            searchFromApi(
+              site,
+              query,
+              config.SiteConfig.SearchDownstreamMaxPage
+            ),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error(`${site.name} timeout`)), 20000)
             ),

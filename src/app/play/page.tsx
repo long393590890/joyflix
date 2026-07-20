@@ -2,9 +2,6 @@
 
 'use client';
 
-import Artplayer from 'artplayer';
-import Hls from 'hls.js';
-
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
@@ -1223,13 +1220,10 @@ function PlayPageClient() {
           throw new Error('获取视频详情失败');
         }
         const detailData = (await detailResponse.json()) as SearchResult;
-        setAvailableSources([detailData]);
         return [detailData];
       } catch (err) {
         console.error('获取视频详情失败:', err);
         return [];
-      } finally {
-        setSourceSearchLoading(false);
       }
     };
     const fetchSourcesData = async (query: string): Promise<SearchResult[]> => {
@@ -1256,15 +1250,24 @@ function PlayPageClient() {
                 (searchType === 'movie' && result.episodes.length === 1)
               : true)
         );
-        setAvailableSources(results);
         return results;
       } catch (err) {
         setSourceSearchError(err instanceof Error ? err.message : '搜索失败');
-        setAvailableSources([]);
         return [];
-      } finally {
-        setSourceSearchLoading(false);
       }
+    };
+
+    const mergeSources = (
+      primarySources: SearchResult[],
+      alternativeSources: SearchResult[]
+    ) => {
+      const seen = new Set<string>();
+      return [...primarySources, ...alternativeSources].filter((item) => {
+        const key = `${item.source}:${item.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     };
 
     const initAll = async () => {
@@ -1274,6 +1277,8 @@ function PlayPageClient() {
         return;
       }
       setLoading(true);
+      setSourceSearchLoading(true);
+      setSourceSearchError(null);
       setLoadingStage(currentSource && currentId ? 'fetching' : 'searching');
       setLoadingMessage(
         currentSource && currentId
@@ -1281,19 +1286,53 @@ function PlayPageClient() {
           : '正在获取影片信息'
       );
 
-      let sourcesInfo = await fetchSourcesData(searchTitle || videoTitle);
-      if (
-        currentSource &&
-        currentId &&
-        !sourcesInfo.some(
-          (source) => source.source === currentSource && source.id === currentId
-        )
-      ) {
+      const sourceQuery = searchTitle || videoTitle;
+      const shouldPrioritizeDirectSource =
+        currentSource && currentId && !needPreferRef.current;
+      let sourcesInfo: SearchResult[] = [];
+
+      if (shouldPrioritizeDirectSource) {
         sourcesInfo = await fetchSourceDetail(currentSource, currentId);
+        if (sourcesInfo.length > 0) {
+          setAvailableSources(sourcesInfo);
+
+          if (sourceQuery) {
+            void fetchSourcesData(sourceQuery)
+              .then((alternativeSources) => {
+                setAvailableSources(
+                  mergeSources(sourcesInfo, alternativeSources)
+                );
+              })
+              .finally(() => setSourceSearchLoading(false));
+          } else {
+            setSourceSearchLoading(false);
+          }
+        } else if (sourceQuery) {
+          sourcesInfo = await fetchSourcesData(sourceQuery);
+          setAvailableSources(sourcesInfo);
+          setSourceSearchLoading(false);
+        }
+      } else {
+        sourcesInfo = await fetchSourcesData(sourceQuery);
+        if (
+          currentSource &&
+          currentId &&
+          !sourcesInfo.some(
+            (source) =>
+              source.source === currentSource && source.id === currentId
+          )
+        ) {
+          const directSource = await fetchSourceDetail(currentSource, currentId);
+          sourcesInfo = mergeSources(directSource, sourcesInfo);
+        }
+        setAvailableSources(sourcesInfo);
+        setSourceSearchLoading(false);
       }
+
       if (sourcesInfo.length === 0) {
         setError('未找到匹配结果');
         setLoading(false);
+        setSourceSearchLoading(false);
         return;
       }
 
@@ -1370,10 +1409,7 @@ function PlayPageClient() {
       setLoadingStage('ready');
       setLoadingMessage('准备就绪');
 
-      // 短暂延迟让用户看到完成状态
-      setTimeout(() => {
-        setLoading(false);
-      }, 1000);
+      setLoading(false);
     };
 
     initAll();
@@ -1921,23 +1957,53 @@ function PlayPageClient() {
 
             ensureVideoSource(video, url);
 
-            hls.on(Hls.Events.ERROR, function (event: any, data: any) {
-              console.error('HLS Error:', event, data);
-              if (data.fatal) {
-                switch (data.type) {
-                  case Hls.ErrorTypes.NETWORK_ERROR:
-                    console.log('网络错误，尝试恢复...');
-                    hls.startLoad();
-                    break;
-                  case Hls.ErrorTypes.MEDIA_ERROR:
-                    console.log('媒体错误，尝试恢复...');
-                    hls.recoverMediaError();
-                    break;
-                  default:
-                    console.log('无法恢复的错误');
-                    hls.destroy();
-                    break;
-                }
+            let networkRecoveryAttempts = 0;
+            let mediaRecoveryAttempts = 0;
+            let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+            let recoveryExhausted = false;
+
+            const scheduleRecovery = (callback: () => void, delay: number) => {
+              if (recoveryTimer) clearTimeout(recoveryTimer);
+              recoveryTimer = setTimeout(callback, delay);
+            };
+
+            hls.on(Hls.Events.DESTROYING, () => {
+              if (recoveryTimer) clearTimeout(recoveryTimer);
+              recoveryTimer = null;
+            });
+
+            hls.on(Hls.Events.ERROR, function (_event: any, data: any) {
+              if (!data.fatal || recoveryExhausted) return;
+
+              console.error('HLS fatal error:', data.type, data.details);
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  if (networkRecoveryAttempts >= 3) {
+                    recoveryExhausted = true;
+                    hls.stopLoad();
+                    return;
+                  }
+                  networkRecoveryAttempts += 1;
+                  scheduleRecovery(
+                    () => hls.startLoad(),
+                    1000 * 2 ** (networkRecoveryAttempts - 1)
+                  );
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  if (mediaRecoveryAttempts >= 2) {
+                    recoveryExhausted = true;
+                    hls.stopLoad();
+                    return;
+                  }
+                  mediaRecoveryAttempts += 1;
+                  scheduleRecovery(
+                    () => hls.recoverMediaError(),
+                    500 * mediaRecoveryAttempts
+                  );
+                  break;
+                default:
+                  hls.destroy();
+                  break;
               }
             });
           },

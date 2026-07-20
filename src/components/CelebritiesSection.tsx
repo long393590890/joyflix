@@ -3,9 +3,8 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Celebrity } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
-import { useIsTablet } from '@/lib/useIsTablet';
+import { useSite } from '@/components/SiteProvider';
 import ConfirmationDialog from './ConfirmationDialog';
-import CelebritiesSectionSkeleton from './CelebritiesSectionSkeleton'; // Import skeleton
 
 interface CelebritiesSectionProps {
   celebrities: Celebrity[];
@@ -13,23 +12,18 @@ interface CelebritiesSectionProps {
 
 const CelebritiesSection: React.FC<CelebritiesSectionProps> = ({ celebrities }) => {
   const router = useRouter();
-  const isTablet = useIsTablet();
+  const { isTablet } = useSite();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedUrl, setSelectedUrl] = useState('');
 
   // Determine the card width based on device type.
   // If isTablet is null, use the default non-tablet width for initial render of skeleton.
-  const cardWidth = isTablet === null ? 'w-32 sm:w-44' : (isTablet ? 'w-40' : 'w-32 sm:w-44');
+  const cardWidth = isTablet ? 'w-40' : 'w-32 sm:w-44';
 
   // If no celebrities, and device type is known, return null.
   // If no celebrities, but device type is unknown, show skeleton with default width.
   if (!celebrities || celebrities.length === 0) {
-    return <CelebritiesSectionSkeleton cardWidth={cardWidth} />;
-  }
-
-  // If celebrities exist, but device type is unknown, show skeleton with default width.
-  if (isTablet === null) {
-    return <CelebritiesSectionSkeleton cardWidth={cardWidth} />;
+    return null;
   }
 
   const handleCelebrityClick = (person: Celebrity) => {

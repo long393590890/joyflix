@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server';
 
-import { getCacheTime, getConfig } from '@/lib/config';
+import { getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
 
 
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const query = searchParams.get('q');
 
   if (!query) {
-    const cacheTime = await getCacheTime();
+    const cacheTime = 7200;
     return NextResponse.json(
       { results: [] },
       {
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   // 添加超时控制和错误处理，避免慢接口拖累整体响应
   const searchPromises = apiSites.map((site) =>
     Promise.race([
-      searchFromApi(site, query),
+      searchFromApi(site, query, config.SiteConfig.SearchDownstreamMaxPage),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`${site.name} timeout`)), 20000)
       ),
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       .map((result) => (result as PromiseFulfilledResult<any>).value);
     let flattenedResults = successResults.flat();
     
-    const cacheTime = await getCacheTime();
+    const cacheTime = config.SiteConfig.SiteInterfaceCacheTime || 7200;
 
     return NextResponse.json(
       { results: flattenedResults },

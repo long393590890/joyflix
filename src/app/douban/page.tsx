@@ -17,7 +17,6 @@ import DoubanSelector from '@/components/DoubanSelector';
 import PageLayout from '@/components/PageLayout';
 import { useSite } from '@/components/SiteProvider';
 import VideoCard from '@/components/VideoCard';
-import { useIsTablet } from '@/lib/useIsTablet';
 
 interface Snapshot {
   type: string;
@@ -29,12 +28,11 @@ interface Snapshot {
 }
 
 function DoubanPageClient() {
-  const { mainContainerRef } = useSite();
+  const { mainContainerRef, isTablet } = useSite();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
 
-  const isTablet = useIsTablet();
   const type = searchParams.get('type') || 'movie';
 
   const [doubanData, setDoubanData] = useState<DoubanItem[]>([]);
@@ -352,18 +350,26 @@ function DoubanPageClient() {
             {loading && !isRestoring ?
               skeletonData.map((index) => <DoubanCardSkeleton key={index} from={type === 'movie' || type === 'tv' || type === 'variety' || type === 'anime' ? type : 'other'} />) :
               doubanData.map((item, index) => (
-                <VideoCard
+                <div
                   key={`${item.title}-${index}`}
-                  from='douban'
-                  title={item.title}
-                  poster={item.poster}
-                  douban_id={Number(item.id)}
-                  rate={item.rate}
-                  year={item.year}
-                  type={type === 'movie' ? 'movie' : ''}
-                  isBangumi={type === 'anime' && primarySelection === '每日放送'}
-                  onNavigate={saveScrollState}
-                />
+                  style={{
+                    contentVisibility: 'auto',
+                    containIntrinsicSize: '300px',
+                  }}
+                >
+                  <VideoCard
+                    from='douban'
+                    title={item.title}
+                    poster={item.poster}
+                    douban_id={Number(item.id)}
+                    rate={item.rate}
+                    year={item.year}
+                    type={type === 'movie' ? 'movie' : ''}
+                    isBangumi={type === 'anime' && primarySelection === '每日放送'}
+                    priority={index < 6}
+                    onNavigate={saveScrollState}
+                  />
+                </div>
               ))}
           </div>
           {hasMore && !loading && (

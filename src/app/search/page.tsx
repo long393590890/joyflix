@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps, @typescript/eslint-no-explicit-any */
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronUp, Search, X, Trash2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -38,6 +38,7 @@ const SearchPageClient: React.FC = () => {
     DoubanResult['list']
   >([]);
   const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(true);
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
   
   // 聚合后的结果（按标题和年份分组）
   const aggregatedResults = useMemo(() => {
@@ -109,34 +110,17 @@ const SearchPageClient: React.FC = () => {
       return document.body.scrollTop || 0;
     };
 
-    // 使用 requestAnimationFrame 持续检测滚动位置
-    let isRunning = false;
-    const checkScrollPosition = () => {
-      if (!isRunning) return;
-
-      const scrollTop = getScrollTop();
-      const shouldShow = scrollTop > 300;
-      setShowBackToTop(shouldShow);
-
-      requestAnimationFrame(checkScrollPosition);
-    };
-
-    // 启动持续检测
-    isRunning = true;
-    checkScrollPosition();
-
     // 监听 body 元素的滚动事件
     const handleScroll = () => {
       const scrollTop = getScrollTop();
       setShowBackToTop(scrollTop > 300);
     };
 
+    handleScroll();
     document.body.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
       unsubscribe();
-      isRunning = false; // 停止 requestAnimationFrame 循环
-
       // 移除 body 滚动事件监听器
       document.body.removeEventListener('scroll', handleScroll);
     };
@@ -168,11 +152,11 @@ const SearchPageClient: React.FC = () => {
     const query = searchParams.get('q');
     if (query) {
       setSearchQuery(query);
-      fetchSearchResults(query);
+      void fetchSearchResults(query);
       setShowSuggestions(false);
 
       // 保存到搜索历史 (事件监听会自动更新界面)
-      addSearchHistory(query);
+      void addSearchHistory(query);
     } else {
       setShowResults(false);
       setShowSuggestions(false);
@@ -180,6 +164,10 @@ const SearchPageClient: React.FC = () => {
   }, [searchParams]);
 
   const fetchSearchResults = async (query: string) => {
+    searchAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortControllerRef.current = controller;
+
     try {
       // 立即设置加载和显示状态，清空旧结果
       setIsLoading(true);
@@ -188,7 +176,8 @@ const SearchPageClient: React.FC = () => {
       setSearchResults([]);
 
       const response = await fetch(
-        `/api/searchstream?q=${encodeURIComponent(query.trim())}`
+        `/api/searchstream?q=${encodeURIComponent(query.trim())}`,
+        { signal: controller.signal }
       );
 
       if (!response.body) {
@@ -260,14 +249,21 @@ const SearchPageClient: React.FC = () => {
         }
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       console.error('Search failed:', error);
       setSearchResults([]);
     } finally {
-      // 确保在流程最后（如无结果时）骨架屏和流状态也能被关闭
-      setIsLoading(false);
-      setIsStreaming(false);
+      if (searchAbortControllerRef.current === controller) {
+        searchAbortControllerRef.current = null;
+        setIsLoading(false);
+        setIsStreaming(false);
+      }
     }
   };
+
+  useEffect(() => {
+    return () => searchAbortControllerRef.current?.abort();
+  }, []);
 
   // 输入框内容变化时触发，显示搜索建议
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -300,12 +296,12 @@ const SearchPageClient: React.FC = () => {
     setShowResults(true);
     setShowSuggestions(false);
 
-    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
-    // 直接发请求
-    fetchSearchResults(trimmed);
-
-    // 保存到搜索历史 (事件监听会自动更新界面)
-    addSearchHistory(trimmed);
+    const nextUrl = `/search?q=${encodeURIComponent(trimmed)}`;
+    if (searchParams.get('q') === trimmed) {
+      void fetchSearchResults(trimmed);
+    } else {
+      router.push(nextUrl);
+    }
   };
 
   const handleSuggestionSelect = (suggestion: string) => {
@@ -316,9 +312,12 @@ const SearchPageClient: React.FC = () => {
     setIsLoading(true);
     setShowResults(true);
 
-    router.push(`/search?q=${encodeURIComponent(suggestion)}`);
-    fetchSearchResults(suggestion);
-    addSearchHistory(suggestion);
+    const nextUrl = `/search?q=${encodeURIComponent(suggestion)}`;
+    if (searchParams.get('q') === suggestion) {
+      void fetchSearchResults(suggestion);
+    } else {
+      router.push(nextUrl);
+    }
   };
 
   // 返回顶部功能

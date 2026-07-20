@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server';
 
-import { getCacheTime, getConfig } from '@/lib/config';
+import { getConfig } from '@/lib/config';
 import { searchAndFindFromApi } from '@/lib/downstream-stream';
 import { SearchResult } from '@/lib/types';
 
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     });
 
     if (firstValidResult) {
-      const cacheTime = await getCacheTime();
+      const cacheTime = config.SiteConfig.SiteInterfaceCacheTime || 7200;
       return NextResponse.json(firstValidResult, {
         headers: {
           'Cache-Control': `public, max-age=${cacheTime}, s-maxage=${cacheTime}`,

@@ -17,6 +17,7 @@ import { SearchResult } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
 
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
+import { useSite } from '@/components/SiteProvider';
 
 interface VideoCardProps {
   id?: string;
@@ -37,6 +38,7 @@ interface VideoCardProps {
   items?: SearchResult[];
   type?: string;
   isBangumi?: boolean;
+  priority?: boolean;
 }
 
 export default function VideoCard({
@@ -58,6 +60,7 @@ export default function VideoCard({
   items,
   type = '',
   isBangumi = false,
+  priority = false,
 }: VideoCardProps) {
   const isValidArabicYear = (year: string | undefined) => {
     if (!year) return false;
@@ -65,16 +68,9 @@ export default function VideoCard({
   };
 
   const router = useRouter();
+  const { isTablet } = useSite();
   const [favorited, setFavorited] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isTablet, setIsTablet] = useState(false);
-
-  useEffect(() => {
-    const userAgent = navigator.userAgent;
-    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    const isTabletDevice = (/(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|((macintosh.*(?!mobile).*safari.*(?!iphone|ipod))))/i.test(userAgent)) && hasTouch;
-    setIsTablet(isTabletDevice);
-  }, []);
 
   const isAggregate = from === 'search' && !!items?.length;
 
@@ -388,8 +384,9 @@ export default function VideoCard({
           sizes='(max-width: 639px) 33vw, (max-width: 1023px) 20vw, 200px'
           className='object-cover'
           referrerPolicy='no-referrer'
-          loading='lazy'
-          onLoadingComplete={() => setIsLoading(true)}
+          priority={priority}
+          loading={priority ? undefined : 'lazy'}
+          onLoad={() => setIsLoading(true)}
           onError={(e) => {
             // 图片加载失败时的重试机制
             const img = e.target as HTMLImageElement;

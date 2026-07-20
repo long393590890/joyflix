@@ -15,14 +15,15 @@ import CelebritiesSection from '@/components/CelebritiesSection';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import {
   deleteFavorite,
+  getAllFavorites,
   isFavorited as checkIfFavorited,
   saveFavorite,
   subscribeToDataUpdates,
   deleteFavoriteByTitle,
 } from '@/lib/db.client';
-import { Favorite, SearchResult } from '@/lib/types';
+import { SearchResult } from '@/lib/types';
 import { processImageUrl } from '@/lib/utils';
-import { useIsTablet } from '@/lib/useIsTablet';
+import { useSite } from '@/components/SiteProvider';
 
 
 function DetailPageClient() {
@@ -44,7 +45,7 @@ function DetailPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const isTablet = useIsTablet();
+  const { isTablet } = useSite();
 
   const doubanId = searchParams.get('doubanId');
   const rate = searchParams.get('rate');
@@ -134,7 +135,9 @@ function DetailPageClient() {
 
   const [isFavorited, setIsFavorited] = useState(false);
   const [isFavoriting, setIsFavoriting] = useState(false); // 在异步操作期间禁用按钮时保留此状态
-  const [allFavorites, setAllFavorites] = useState<Record<string, Favorite>>({});
+  const [allFavorites, setAllFavorites] = useState<
+    Awaited<ReturnType<typeof getAllFavorites>>
+  >({});
   const [showTrailerConfirmDialog, setShowTrailerConfirmDialog] = useState(false);
   const [showNoTrailerDialog, setShowNoTrailerDialog] = useState(false);
 
@@ -151,12 +154,7 @@ function DetailPageClient() {
 
     const fetchFavoriteStatus = async () => {
       try {
-        // 获取整个收藏列表
-        const response = await fetch('/api/favorites');
-        if (!response.ok) {
-          throw new Error('Failed to fetch favorites');
-        }
-        const favorites: Record<string, Favorite> = await response.json();
+        const favorites = await getAllFavorites();
         setAllFavorites(favorites); // 将所有收藏存储在状态中
 
         // 检查是否有任何收藏具有相同的标题
@@ -185,7 +183,7 @@ function DetailPageClient() {
     );
 
     return () => unsubscribe(); // 清理订阅
-  }, [detail]);
+  }, [detail?.title]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -198,7 +196,11 @@ function DetailPageClient() {
         let wmdbDataFetched = false;
 
         if (doubanId) {
-          const doubanData = await fetchDoubanMovieData(doubanId);
+          const [doubanData, wmdbData] = await Promise.all([
+            fetchDoubanMovieData(doubanId),
+            fetchWMDBData(doubanId),
+          ]);
+
           if (doubanData) {
             videoDetailToSet = {
               id: id || '',
@@ -217,13 +219,11 @@ function DetailPageClient() {
               source_name: '',
             } as SearchResult;
             doubanDataFetched = true;
-          }
-        }
-
-        if (!doubanDataFetched && doubanId) {
-          const wmdbData = await fetchWMDBData(doubanId);
-          
-          if (wmdbData && wmdbData.data && wmdbData.data.length > 0) {
+          } else if (
+            wmdbData &&
+            wmdbData.data &&
+            wmdbData.data.length > 0
+          ) {
             const movieData = wmdbData.data[0]; // 假设第一项是相关的
             
             
@@ -498,6 +498,7 @@ function DetailPageClient() {
                     src={processImageUrl(initialPoster || detail?.poster || '')}
                     alt={detail?.title || 'Video Poster'}
                     fill
+                    priority
                     className='object-cover'
                     referrerPolicy='no-referrer'
                   />

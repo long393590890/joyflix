@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useIsTablet } from '@/lib/useIsTablet';
 import { useFloatingHeaderVisibility } from '@/lib/useFloatingHeaderVisibility';
 import { clearScrollCache } from '@/lib/scrollCache';
 import { BackButton } from './BackButton';
@@ -25,10 +24,9 @@ interface PageLayoutProps {
 }
 
 const PageLayout = ({ children, activePath = '/', title, headerContent }: PageLayoutProps) => {
-  const { mainContainerRef } = useSite();
+  const { mainContainerRef, isTablet } = useSite();
   const [heightClass, setHeightClass] = useState('h-screen');
   const [isTabletSidebarOpen, setIsTabletSidebarOpen] = useState(false);
-  const isTablet = useIsTablet();
   const pathname = usePathname();
   const router = useRouter();
 
