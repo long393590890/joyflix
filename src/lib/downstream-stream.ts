@@ -89,7 +89,9 @@ export async function searchAndFindFromApi(
 
     clearTimeout(timeoutId);
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      throw new Error(`${apiName} HTTP ${response.status}`);
+    }
 
     const data = await response.json();
     if (!data || !data.list || !Array.isArray(data.list) || data.list.length === 0) {
@@ -156,6 +158,6 @@ export async function searchAndFindFromApi(
 
     return null; // 在任何页面上都未找到匹配项
   } catch (error) {
-    return null;
+    throw error instanceof Error ? error : new Error('资源站搜索失败');
   }
 }

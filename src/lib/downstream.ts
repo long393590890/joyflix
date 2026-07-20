@@ -38,7 +38,7 @@ export async function searchFromApi(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      return [];
+      throw new Error(`${apiName} HTTP ${response.status}`);
     }
 
     const data = await response.json();
@@ -209,7 +209,7 @@ export async function searchFromApi(
 
     return results;
   } catch (error) {
-    return [];
+    throw error instanceof Error ? error : new Error('资源站搜索失败');
   }
 }
 

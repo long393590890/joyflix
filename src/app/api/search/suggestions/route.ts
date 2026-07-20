@@ -5,6 +5,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
+import {
+  isSiteCircuitOpenError,
+  withSiteCircuitBreaker,
+  withTimeout,
+} from '@/lib/search-resilience';
 
 export const runtime = 'edge';
 
@@ -73,7 +78,23 @@ async function generateSuggestions(query: string): Promise<
   if (apiSites.length > 0) {
     // 取第一个可用的数据源进行搜索
     const firstSite = apiSites[0];
-    const results = await searchFromApi(firstSite, query);
+    let results: Awaited<ReturnType<typeof searchFromApi>> = [];
+    try {
+      results = await withSiteCircuitBreaker(firstSite.key, () =>
+        withTimeout(
+          searchFromApi(firstSite, query),
+          20000,
+          `${firstSite.name} timeout`
+        )
+      );
+    } catch (error) {
+      if (!isSiteCircuitOpenError(error)) {
+        console.warn(
+          `搜索建议数据源失败 ${firstSite.name}:`,
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
 
     realKeywords = Array.from(
       new Set(

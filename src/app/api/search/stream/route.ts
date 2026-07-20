@@ -4,7 +4,12 @@ import { NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
 import { searchAndFindFromApi } from '@/lib/downstream-stream';
-import { SearchResult } from '@/lib/types';
+import {
+  isSiteCircuitOpenError,
+  mapWithConcurrency,
+  SEARCH_SITE_CONCURRENCY,
+  withSiteCircuitBreaker,
+} from '@/lib/search-resilience';
 
 
 export const runtime = 'edge';
@@ -22,11 +27,30 @@ export async function GET(request: Request) {
   const apiSites = config.SourceConfig.filter((site) => !site.disabled);
 
   try {
-    const searchPromises = apiSites.map(site =>
-      searchAndFindFromApi(site, query, year, config.SiteConfig.SearchDownstreamMaxPage)
+    const results = await mapWithConcurrency(
+      apiSites,
+      SEARCH_SITE_CONCURRENCY,
+      async (site) => {
+        try {
+          return await withSiteCircuitBreaker(site.key, () =>
+            searchAndFindFromApi(
+              site,
+              query,
+              year,
+              config.SiteConfig.SearchDownstreamMaxPage
+            )
+          );
+        } catch (error) {
+          if (!isSiteCircuitOpenError(error)) {
+            console.warn(
+              `搜索失败 ${site.name}:`,
+              error instanceof Error ? error.message : error
+            );
+          }
+          return null;
+        }
+      }
     );
-
-    const results = await Promise.all(searchPromises);
 
     // 查找第一个未被过滤的有效结果
     const firstValidResult = results.find(result => {
