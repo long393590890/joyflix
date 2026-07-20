@@ -91,7 +91,7 @@ function PlayPageClient() {
       const v = localStorage.getItem('enable_blockad');
       if (v !== null) return v === 'true';
     }
-    return true;
+    return false;
   });
   const blockAdEnabledRef = useRef(blockAdEnabled);
   useEffect(() => {
