@@ -10,6 +10,7 @@ import {
   User,
   X,
   Moon,
+  Search,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -20,6 +21,8 @@ import { createPortal } from 'react-dom';
 import { useTheme } from 'next-themes'; // Added
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
+
+import { useSite } from './SiteProvider';
 
 // Reusable Components (Apple-like design)
 // =================================================================
@@ -98,6 +101,7 @@ const Modal: FC<ModalProps> = ({ children, onClose, title, showReset, onReset })
 
 export const UserMenu: React.FC<{ className?: string }> = ({ className }) => {
   const router = useRouter();
+  const { isPreciseSearchEnabled, setIsPreciseSearchEnabled } = useSite();
   const [isOpen, setIsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
@@ -170,6 +174,11 @@ export const UserMenu: React.FC<{ className?: string }> = ({ className }) => {
     (document as any).startViewTransition(() => {
       setTheme(targetTheme);
     });
+  };
+
+  const togglePreciseSearch = (enabled: boolean) => {
+    setIsPreciseSearchEnabled(enabled);
+    localStorage.setItem('enablePreciseSearch', String(enabled));
   };
 
   useEffect(() => {
@@ -376,6 +385,25 @@ export const UserMenu: React.FC<{ className?: string }> = ({ className }) => {
             </label>
           </div>
         )}
+        <div className='flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80 transition-colors'>
+          <div className='flex items-center gap-3'>
+            <Search className='w-4 h-4 text-zinc-500 dark:text-zinc-400' />
+            <span className='font-medium text-zinc-800 dark:text-zinc-200'>精准搜索</span>
+          </div>
+          <label className='flex items-center cursor-pointer'>
+            <div className='relative'>
+              <input
+                type='checkbox'
+                aria-label='精准搜索'
+                className='sr-only peer'
+                checked={isPreciseSearchEnabled}
+                onChange={(event) => togglePreciseSearch(event.target.checked)}
+              />
+              <div className='w-9 h-5 bg-zinc-300 dark:bg-zinc-700 rounded-full peer-checked:bg-blue-400 transition-colors'></div>
+              <div className='absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-[18px]'></div>
+            </div>
+          </label>
+        </div>
         <div className='py-1 space-y-1'>
           <MenuItem icon={Cog} text='应用设置' onClick={handleSettings} />
           {showAdminPanel && <MenuItem icon={Settings} text='后台设置' onClick={handleAdminPanel} />}

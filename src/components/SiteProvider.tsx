@@ -17,6 +17,8 @@ const SiteContext = createContext<{
   announcement?: string;
   mainContainerRef?: MutableRefObject<HTMLDivElement | null>;
   isTablet: boolean;
+  isPreciseSearchEnabled: boolean;
+  setIsPreciseSearchEnabled: Dispatch<SetStateAction<boolean>>;
   isSerialSpeedTest: boolean;
   setIsSerialSpeedTest: Dispatch<SetStateAction<boolean>>;
 }>({
@@ -24,6 +26,8 @@ const SiteContext = createContext<{
   announcement: '切勿分享本站，以维持使用体验哦 ʕ •ᴥ•ʔ～✰✰',
   mainContainerRef: undefined,
   isTablet: false,
+  isPreciseSearchEnabled: false,
+  setIsPreciseSearchEnabled: () => {},
   isSerialSpeedTest: false,
   setIsSerialSpeedTest: () => {},
 });
@@ -41,6 +45,11 @@ export function SiteProvider({
 }) {
   const mainContainerRef = useRef<HTMLDivElement | null>(null);
   const [isTablet, setIsTablet] = useState(false);
+  const [isPreciseSearchEnabled, setIsPreciseSearchEnabled] =
+    useState<boolean>(() => {
+      if (typeof window === 'undefined') return false;
+      return localStorage.getItem('enablePreciseSearch') === 'true';
+    });
   const [isSerialSpeedTest, setIsSerialSpeedTest] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('isSerialSpeedTest');
@@ -79,6 +88,8 @@ export function SiteProvider({
         announcement,
         mainContainerRef,
         isTablet,
+        isPreciseSearchEnabled,
+        setIsPreciseSearchEnabled,
         isSerialSpeedTest,
         setIsSerialSpeedTest,
       }}

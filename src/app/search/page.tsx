@@ -17,10 +17,12 @@ import { DoubanResult, SearchResult } from '@/lib/types';
 
 import PageLayout from '@/components/PageLayout';
 import SearchSuggestions from '@/components/SearchSuggestions';
+import { useSite } from '@/components/SiteProvider';
 import VideoCard from '@/components/VideoCard';
 import VideoCardSkeleton from '@/components/VideoCardSkeleton';
 
 const SearchPageClient: React.FC = () => {
+  const { isPreciseSearchEnabled } = useSite();
   // 搜索历史
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   // 返回顶部按钮显示状态
@@ -161,7 +163,7 @@ const SearchPageClient: React.FC = () => {
       setShowResults(false);
       setShowSuggestions(false);
     }
-  }, [searchParams]);
+  }, [searchParams, isPreciseSearchEnabled]);
 
   const fetchSearchResults = async (query: string) => {
     searchAbortControllerRef.current?.abort();
@@ -206,11 +208,13 @@ const SearchPageClient: React.FC = () => {
           try {
             const newResultsChunk: SearchResult[] = JSON.parse(line);
 
-            let filteredResults = newResultsChunk.filter((result) => {
-              const lowerCaseQuery = query.trim().toLowerCase();
-              const lowerCaseTitle = result.title.toLowerCase();
-              return lowerCaseTitle.includes(lowerCaseQuery);
-            });
+            let filteredResults = isPreciseSearchEnabled
+              ? newResultsChunk.filter((result) => {
+                  const lowerCaseQuery = query.trim().toLowerCase();
+                  const lowerCaseTitle = result.title.toLowerCase();
+                  return lowerCaseTitle.includes(lowerCaseQuery);
+                })
+              : newResultsChunk;
 
             const filterKeywords = ['电影解说', '剧情解说', '预告片', '解说'];
             filteredResults = filteredResults.filter(
