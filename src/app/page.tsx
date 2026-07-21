@@ -2,7 +2,7 @@
 
 'use client';
 
-import { ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronRight, Loader2, RotateCcw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation'; // 添加 usePathname
 import { Suspense, useEffect, useState } from 'react';
@@ -28,6 +28,7 @@ import { DoubanItem } from '@/lib/types';
 import CapsuleSwitch from '@/components/CapsuleSwitch';
 import ContinueWatching from '@/components/ContinueWatching';
 import PageLayout from '@/components/PageLayout';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
 import ScrollableRow from '@/components/ScrollableRow';
 import { useSite } from '@/components/SiteProvider';
 import VideoCard from '@/components/VideoCard';
@@ -39,6 +40,20 @@ type RecommendationSection =
   | 'bangumi'
   | 'varietyShows'
   | 'customCategory';
+
+const RecommendationLoadError = ({ onRetry }: { onRetry: () => void }) => (
+  <div className='flex min-h-40 min-w-full flex-col items-center justify-center text-sm text-gray-500 dark:text-gray-400'>
+    <span>加载失败</span>
+    <button
+      type='button'
+      onClick={onRetry}
+      className='mt-3 inline-flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+    >
+      <RotateCcw className='h-4 w-4' />
+      重新加载
+    </button>
+  </div>
+);
 
 function HomeClient() {
   const { mainContainerRef } = useSite();
@@ -64,7 +79,17 @@ function HomeClient() {
     varietyShows: true,
     customCategory: true,
   });
+  const [recommendationErrors, setRecommendationErrors] = useState<
+    Record<RecommendationSection, boolean>
+  >({
+    movies: false,
+    tvShows: false,
+    bangumi: false,
+    varietyShows: false,
+    customCategory: false,
+  });
   const [favoritesLoading, setFavoritesLoading] = useState(true);
+  const [clearingFavorites, setClearingFavorites] = useState(false);
   const { announcement } = useSite();
 
   const [showAnnouncement, setShowAnnouncement] = useState(false);
@@ -103,61 +128,59 @@ function HomeClient() {
 
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
 
-  useEffect(() => {
-    const loadSection = async (
-      section: RecommendationSection,
-      request: () => Promise<void>
-    ) => {
-      try {
-        await request();
-      } catch (error) {
-        console.error(`获取推荐栏目 ${section} 失败:`, error);
-      } finally {
-        setRecommendationLoading((current) => ({
-          ...current,
-          [section]: false,
-        }));
-      }
-    };
-
-    void Promise.all([
-      loadSection('movies', async () => {
+  const loadRecommendationSection = async (section: RecommendationSection) => {
+    setRecommendationLoading((current) => ({ ...current, [section]: true }));
+    setRecommendationErrors((current) => ({ ...current, [section]: false }));
+    try {
+      if (section === 'movies') {
         const data = await getDoubanCategories({
           kind: 'movie',
           category: '热门',
           type: '全部',
         });
-        if (data.code === 200) setHotMovies(data.list);
-      }),
-      loadSection('tvShows', async () => {
+        if (data.code !== 200) throw new Error(data.message || '热门电影加载失败');
+        setHotMovies(data.list);
+      } else if (section === 'tvShows') {
         const data = await getDoubanCategories({
           kind: 'tv',
           category: 'tv',
           type: 'tv',
         });
-        if (data.code === 200) setHotTvShows(data.list);
-      }),
-      loadSection('bangumi', async () => {
+        if (data.code !== 200) throw new Error(data.message || '热门剧集加载失败');
+        setHotTvShows(data.list);
+      } else if (section === 'bangumi') {
         setBangumiCalendarData(await GetBangumiCalendarData());
-      }),
-      loadSection('varietyShows', async () => {
+      } else if (section === 'varietyShows') {
         const data = await getDoubanCategories({
           kind: 'tv',
           category: 'show',
           type: 'show',
         });
-        if (data.code === 200) setHotVarietyShows(data.list);
-      }),
-      loadSection('customCategory', async () => {
+        if (data.code !== 200) throw new Error(data.message || '热门综艺加载失败');
+        setHotVarietyShows(data.list);
+      } else {
         const data = await getDoubanList({
           tag: '华语',
           type: 'movie',
           pageLimit: 25,
           pageStart: 0,
         });
-        if (data.code === 200) setHotCustomCategory(data.list);
-      }),
-    ]);
+        if (data.code !== 200) throw new Error(data.message || '更多热门加载失败');
+        setHotCustomCategory(data.list);
+      }
+    } catch (error) {
+      console.error(`获取推荐栏目 ${section} 失败:`, error);
+      setRecommendationErrors((current) => ({ ...current, [section]: true }));
+    } finally {
+      setRecommendationLoading((current) => ({ ...current, [section]: false }));
+    }
+  };
+
+  useEffect(() => {
+    void Promise.all(
+      (['movies', 'tvShows', 'bangumi', 'varietyShows', 'customCategory'] as RecommendationSection[])
+        .map((section) => loadRecommendationSection(section))
+    );
   }, []);
 
   // 处理收藏数据更新的函数
@@ -252,14 +275,27 @@ function HomeClient() {
                 {favoriteItems.length > 0 && (
                   <button
                     onClick={async () => {
-                      await clearAllFavorites();
-                      setFavoriteItems([]);
+                      if (clearingFavorites) return;
+                      setClearingFavorites(true);
+                      try {
+                        await clearAllFavorites();
+                        setFavoriteItems([]);
+                      } finally {
+                        setClearingFavorites(false);
+                      }
                     }}
+                    disabled={clearingFavorites}
+                    aria-label='清空全部收藏'
+                    className='disabled:cursor-wait disabled:opacity-60'
                   >
-                    <Trash2
-                      size={20}
-                      className='text-gray-500 dark:text-gray-400 transition-all duration-300 ease-out hover:stroke-red-500 hover:scale-[1.1]'
-                    />
+                    {clearingFavorites ? (
+                      <Loader2 size={20} className='animate-spin text-gray-500 dark:text-gray-400' />
+                    ) : (
+                      <Trash2
+                        size={20}
+                        className='text-gray-500 dark:text-gray-400 transition-all duration-300 ease-out hover:stroke-red-500 hover:scale-[1.1]'
+                      />
+                    )}
                   </button>
                 )}
               </div>
@@ -320,8 +356,9 @@ function HomeClient() {
                           showYear={true}
                         />
                       ))
-                    : // 显示真实数据
-                      hotMovies.map((movie, index) => (
+                    : recommendationErrors.movies
+                      ? <RecommendationLoadError onRetry={() => void loadRecommendationSection('movies')} />
+                      : hotMovies.map((movie, index) => (
                         <div
                           key={index}
                           className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -364,8 +401,9 @@ function HomeClient() {
                           showYear={true}
                         />
                       ))
-                    : // 显示真实数据
-                      hotTvShows.map((show, index) => (
+                    : recommendationErrors.tvShows
+                      ? <RecommendationLoadError onRetry={() => void loadRecommendationSection('tvShows')} />
+                      : hotTvShows.map((show, index) => (
                         <div
                           key={index}
                           className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -407,8 +445,9 @@ function HomeClient() {
                           showYear={true}
                         />
                       ))
-                    : // 展示当前日期的番剧
-                      (() => {
+                    : recommendationErrors.bangumi
+                      ? <RecommendationLoadError onRetry={() => void loadRecommendationSection('bangumi')} />
+                      : (() => {
                         // 获取当前日期对应的星期
                         const today = new Date();
                         const weekdays = [
@@ -478,8 +517,9 @@ function HomeClient() {
                           showYear={true}
                         />
                       ))
-                    : // 显示真实数据
-                      hotVarietyShows.map((show, index) => (
+                    : recommendationErrors.varietyShows
+                      ? <RecommendationLoadError onRetry={() => void loadRecommendationSection('varietyShows')} />
+                      : hotVarietyShows.map((show, index) => (
                         <div
                           key={index}
                           className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -521,8 +561,9 @@ function HomeClient() {
                           showYear={true}
                         />
                       ))
-                    : // 显示真实数据
-                      hotCustomCategory.map((show, index) => (
+                    : recommendationErrors.customCategory
+                      ? <RecommendationLoadError onRetry={() => void loadRecommendationSection('customCategory')} />
+                      : hotCustomCategory.map((show, index) => (
                         <div
                           key={index}
                           className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -559,7 +600,7 @@ function HomeClient() {
 
 export default function Home() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoadingSkeleton />}>
       <HomeClient />
     </Suspense>
   );

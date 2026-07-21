@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { Heart, Link, PlayCircleIcon, Trash2 } from 'lucide-react';
+import { Heart, Link, Loader2, PlayCircleIcon, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -71,6 +71,8 @@ export default function VideoCard({
   const { isTablet } = useSite();
   const [favorited, setFavorited] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [favoritePending, setFavoritePending] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
 
   const isAggregate = from === 'search' && !!items?.length;
 
@@ -154,7 +156,8 @@ export default function VideoCard({
     async (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (from === 'douban' || !actualSource || !actualId) return;
+      if (favoritePending || from === 'douban' || !actualSource || !actualId) return;
+      setFavoritePending(true);
       try {
         if (favorited) {
           // 如果已收藏，删除收藏
@@ -174,6 +177,8 @@ export default function VideoCard({
         }
       } catch (err) {
         throw new Error('切换收藏状态失败');
+      } finally {
+        setFavoritePending(false);
       }
     },
     [
@@ -186,6 +191,7 @@ export default function VideoCard({
       actualPoster,
       actualEpisodes,
       favorited,
+      favoritePending,
     ]
   );
 
@@ -193,15 +199,18 @@ export default function VideoCard({
     async (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (from !== 'playrecord' || !actualSource || !actualId) return;
+      if (deletePending || from !== 'playrecord' || !actualSource || !actualId) return;
+      setDeletePending(true);
       try {
         await deletePlayRecord(actualSource, actualId);
         onDelete?.();
       } catch (err) {
         throw new Error('删除播放记录失败');
+      } finally {
+        setDeletePending(false);
       }
     },
-    [from, actualSource, actualId, onDelete]
+    [from, actualSource, actualId, onDelete, deletePending]
   );
 
   const handleClick = useCallback(() => {
@@ -456,22 +465,44 @@ export default function VideoCard({
         {(config.showHeart || config.showCheckCircle) && (
           <div className='absolute bottom-3 right-3 flex gap-3 opacity-0 translate-y-2 transition-all duration-300 ease-in-out group-hover:opacity-100 group-hover:translate-y-0'>
             {config.showHeart && (
-              <Heart
+              <button
+                type='button'
                 onClick={handleToggleFavorite}
-                size={20}
-                className={`transition-all duration-300 ease-out ${
-                  favorited
-                    ? 'fill-red-600 stroke-red-600'
-                    : 'fill-transparent stroke-white hover:stroke-red-400'
-                } hover:scale-[1.1]`}
-              />
+                disabled={favoritePending}
+                aria-label={favorited ? '取消收藏' : '收藏'}
+                className='flex h-5 w-5 items-center justify-center disabled:cursor-wait'
+              >
+                {favoritePending ? (
+                  <Loader2 size={20} className='animate-spin text-white' />
+                ) : (
+                  <Heart
+                    size={20}
+                    className={`transition-all duration-300 ease-out ${
+                      favorited
+                        ? 'fill-red-600 stroke-red-600'
+                        : 'fill-transparent stroke-white hover:stroke-red-400'
+                    } hover:scale-[1.1]`}
+                  />
+                )}
+              </button>
             )}
             {config.showCheckCircle && (
-              <Trash2
+              <button
+                type='button'
                 onClick={from === 'favorite' ? handleToggleFavorite : handleDeleteRecord}
-                size={20}
-                className='text-white transition-all duration-300 ease-out hover:stroke-red-500 hover:scale-[1.1]'
-              />
+                disabled={from === 'favorite' ? favoritePending : deletePending}
+                aria-label={from === 'favorite' ? '取消收藏' : '删除播放记录'}
+                className='flex h-5 w-5 items-center justify-center disabled:cursor-wait'
+              >
+                {(from === 'favorite' ? favoritePending : deletePending) ? (
+                  <Loader2 size={20} className='animate-spin text-white' />
+                ) : (
+                  <Trash2
+                    size={20}
+                    className='text-white transition-all duration-300 ease-out hover:stroke-red-500 hover:scale-[1.1]'
+                  />
+                )}
+              </button>
             )}
           </div>
         )}

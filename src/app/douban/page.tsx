@@ -12,6 +12,7 @@ import { DoubanItem, DoubanResult } from '@/lib/types';
 import { RestorableData, useScrollRestoration } from '@/lib/useScrollRestoration';
 
 import DoubanCardSkeleton from '@/components/DoubanCardSkeleton';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
 import DoubanCustomSelector from '@/components/DoubanCustomSelector';
 import DoubanSelector from '@/components/DoubanSelector';
 import PageLayout from '@/components/PageLayout';
@@ -40,6 +41,9 @@ function DoubanPageClient() {
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [loadMoreRetryKey, setLoadMoreRetryKey] = useState(0);
   const [selectorsReady, setSelectorsReady] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadingRef = useRef<HTMLDivElement | null>(null);
@@ -168,6 +172,8 @@ function DoubanPageClient() {
     setCurrentPage(0);
     setHasMore(true);
     setIsLoadingMore(false);
+    setLoadError(null);
+    setLoadMoreError(null);
     try {
       let data: DoubanResult;
       if (type === 'custom') {
@@ -195,6 +201,9 @@ function DoubanPageClient() {
         }
       } else { throw new Error(data.message || '获取数据失败'); }
     } catch (err) {
+      if (isSnapshotEqual(requestSnapshot, { ...currentParamsRef.current })) {
+        setLoadError(err instanceof Error ? err.message : '内容加载失败');
+      }
     } finally {
       setLoading(false);
     }
@@ -223,6 +232,7 @@ function DoubanPageClient() {
     const fetchMoreData = async () => {
       const requestSnapshot = { type, primarySelection, secondarySelection, multiLevelSelection: multiLevelValues, selectedWeekday, currentPage };
       setIsLoadingMore(true);
+      setLoadMoreError(null);
       try {
         let data: DoubanResult;
         if (type === 'custom') {
@@ -247,12 +257,15 @@ function DoubanPageClient() {
         } else { throw new Error(data.message || '获取数据失败'); }
       } catch (err) {
         console.error(err);
+        if (isSnapshotEqual(requestSnapshot, { ...currentParamsRef.current })) {
+          setLoadMoreError(err instanceof Error ? err.message : '加载更多失败');
+        }
       } finally {
         setIsLoadingMore(false);
       }
     };
     fetchMoreData();
-  }, [currentPage, type, primarySelection, secondarySelection, customCategories, multiLevelValues, selectedWeekday, getRequestParams, isSnapshotEqual]);
+  }, [currentPage, type, primarySelection, secondarySelection, customCategories, multiLevelValues, selectedWeekday, getRequestParams, isSnapshotEqual, loadMoreRetryKey]);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 768);
@@ -263,7 +276,7 @@ function DoubanPageClient() {
 
   // 设置滚动监听 (仅在非恢复状态下)
   useEffect(() => {
-    if (isRestoring || !hasMore || isLoadingMore || loading || !loadingRef.current) return;
+    if (isRestoring || !hasMore || isLoadingMore || loading || loadMoreError || !loadingRef.current) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
@@ -275,7 +288,7 @@ function DoubanPageClient() {
     observer.observe(loadingRef.current);
     observerRef.current = observer;
     return () => { if (observerRef.current) observerRef.current.disconnect(); };
-  }, [hasMore, isLoadingMore, loading, mainContainerRef, isDesktop, isRestoring]);
+  }, [hasMore, isLoadingMore, loading, loadMoreError, mainContainerRef, isDesktop, isRestoring]);
 
   const handleSelectionChange = useCallback(() => {
     clearScrollCache(pathname);
@@ -284,6 +297,8 @@ function DoubanPageClient() {
     setDoubanData([]);
     setHasMore(true);
     setIsLoadingMore(false);
+    setLoadError(null);
+    setLoadMoreError(null);
   }, [pathname]);
 
   const handlePrimaryChange = useCallback((value: string) => {
@@ -372,9 +387,32 @@ function DoubanPageClient() {
                 </div>
               ))}
           </div>
+          {!loading && loadError && (
+            <div className='py-10 text-center'>
+              <p className='text-sm text-red-600 dark:text-red-400'>{loadError}</p>
+              <button
+                type='button'
+                onClick={() => void loadInitialData()}
+                className='mt-3 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600'
+              >
+                重新加载
+              </button>
+            </div>
+          )}
           {hasMore && !loading && (
             <div ref={loadingRef} className='flex justify-center mt-12 py-8'>
-              {isLoadingMore && (
+              {loadMoreError ? (
+                <div className='text-center'>
+                  <p className='text-sm text-red-600 dark:text-red-400'>{loadMoreError}</p>
+                  <button
+                    type='button'
+                    onClick={() => setLoadMoreRetryKey((current) => current + 1)}
+                    className='mt-3 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600'
+                  >
+                    重试加载更多
+                  </button>
+                </div>
+              ) : isLoadingMore && (
                 <div className='flex items-center gap-2'>
                   <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400'></div>
                   <span className='text-gray-600'>加载中...</span>
@@ -383,7 +421,7 @@ function DoubanPageClient() {
             </div>
           )}
           {!hasMore && doubanData.length > 0 && <div className='text-center text-gray-500 py-8'>暂无更多</div>}
-          {!loading && doubanData.length === 0 && !isRestoring && (
+          {!loading && !loadError && doubanData.length === 0 && !isRestoring && (
             <div className='text-center text-gray-500 py-8'>暂无相关内容</div>
           )}
         </div>
@@ -394,7 +432,7 @@ function DoubanPageClient() {
 
 export default function DoubanPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoadingSkeleton />}>
       <DoubanPageClient />
     </Suspense>
   );

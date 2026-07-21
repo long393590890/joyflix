@@ -3,11 +3,14 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 import { AdminConfig, AdminConfigResult } from '@/lib/admin.types';
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
+import AdminLoadError from '@/components/AdminLoadError';
 import PageLayout from '@/components/PageLayout';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
 
 // 统一弹窗方法
 const MySwal = Swal.mixin({
@@ -41,6 +44,15 @@ interface UserConfigProps {
   refreshConfig: () => Promise<void>;
 }
 
+type UserAction =
+  | 'add'
+  | 'ban'
+  | 'unban'
+  | 'setAdmin'
+  | 'cancelAdmin'
+  | 'changePassword'
+  | 'deleteUser';
+
 const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
   const [showAddUserForm, setShowAddUserForm] = useState(false);
   const [showChangePasswordForm, setShowChangePasswordForm] = useState(false);
@@ -52,6 +64,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
     username: '',
     password: '',
   });
+  const [pendingActions, setPendingActions] = useState<Record<string, UserAction>>({});
 
   const currentUsername = getAuthInfoFromBrowserCookie()?.username || null;
 
@@ -77,20 +90,24 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
 
   const handleAddUser = async () => {
     if (!newUser.username || !newUser.password) return;
-    await handleUserAction('add', newUser.username, newUser.password);
-    setNewUser({ username: '', password: '' });
-    setShowAddUserForm(false);
+    const succeeded = await handleUserAction('add', newUser.username, newUser.password);
+    if (succeeded) {
+      setNewUser({ username: '', password: '' });
+      setShowAddUserForm(false);
+    }
   };
 
   const handleChangePassword = async () => {
     if (!changePasswordUser.username || !changePasswordUser.password) return;
-    await handleUserAction(
+    const succeeded = await handleUserAction(
       'changePassword',
       changePasswordUser.username,
       changePasswordUser.password
     );
-    setChangePasswordUser({ username: '', password: '' });
-    setShowChangePasswordForm(false);
+    if (succeeded) {
+      setChangePasswordUser({ username: '', password: '' });
+      setShowChangePasswordForm(false);
+    }
   };
 
   const handleShowChangePasswordForm = (username: string) => {
@@ -116,17 +133,12 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
   };
 
   const handleUserAction = async (
-    action:
-      | 'add'
-      | 'ban'
-      | 'unban'
-      | 'setAdmin'
-      | 'cancelAdmin'
-      | 'changePassword'
-      | 'deleteUser',
+    action: UserAction,
     targetUsername: string,
     targetPassword?: string
-  ) => {
+  ): Promise<boolean> => {
+    if (pendingActions[targetUsername]) return false;
+    setPendingActions((current) => ({ ...current, [targetUsername]: action }));
     try {
       const res = await fetch('/api/admin/user', {
         method: 'POST',
@@ -144,8 +156,16 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
       }
 
       await refreshConfig();
+      return true;
     } catch (err) {
       showError(err instanceof Error ? err.message : '操作失败');
+      return false;
+    } finally {
+      setPendingActions((current) => {
+        const next = { ...current };
+        delete next[targetUsername];
+        return next;
+      });
     }
   };
 
@@ -212,10 +232,19 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
               />
               <button
                 onClick={handleAddUser}
-                disabled={!newUser.username || !newUser.password}
+                disabled={
+                  !newUser.username ||
+                  !newUser.password ||
+                  pendingActions[newUser.username] === 'add'
+                }
                 className='w-full sm:w-auto px-4 py-2 bg-blue-400 hover:bg-blue-500 disabled:bg-gray-400 text-white rounded-lg transition-colors'
               >
-                添加
+                {pendingActions[newUser.username] === 'add' ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    添加中...
+                  </span>
+                ) : '添加'}
               </button>
             </div>
           </div>
@@ -248,10 +277,18 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
               />
               <button
                 onClick={handleChangePassword}
-                disabled={!changePasswordUser.password}
+                disabled={
+                  !changePasswordUser.password ||
+                  pendingActions[changePasswordUser.username] === 'changePassword'
+                }
                 className='w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors'
               >
-                修改密码
+                {pendingActions[changePasswordUser.username] === 'changePassword' ? (
+                  <span className='inline-flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    修改中...
+                  </span>
+                ) : '修改密码'}
               </button>
               <button
                 onClick={() => {
@@ -326,6 +363,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                       user.username !== currentUsername &&
                       (role === 'owner' ||
                         (role === 'admin' && user.role === 'user'));
+                    const pendingForUser = pendingActions[user.username] || null;
                     return (
                       <tr
                         key={user.username}
@@ -376,9 +414,10 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                               {user.role === 'user' && (
                                 <button
                                   onClick={() => handleSetAdmin(user.username)}
-                                  className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-900/40 dark:hover:bg-purple-900/60 dark:text-purple-200 transition-colors'
+                                  disabled={pendingForUser !== null}
+                                  className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-900/40 dark:hover:bg-purple-900/60 dark:text-purple-200 transition-colors disabled:cursor-wait disabled:opacity-60'
                                 >
-                                  设为管理
+                                  {pendingForUser === 'setAdmin' ? '处理中...' : '设为管理'}
                                 </button>
                               )}
                               {user.role === 'admin' && (
@@ -386,27 +425,30 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                                   onClick={() =>
                                     handleRemoveAdmin(user.username)
                                   }
-                                  className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700/40 dark:hover:bg-gray-700/60 dark:text-gray-200 transition-colors'
+                                  disabled={pendingForUser !== null}
+                                  className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700/40 dark:hover:bg-gray-700/60 dark:text-gray-200 transition-colors disabled:cursor-wait disabled:opacity-60'
                                 >
-                                  取消管理
+                                  {pendingForUser === 'cancelAdmin' ? '处理中...' : '取消管理'}
                                 </button>
                               )}
                               {user.role !== 'owner' &&
                                 (!user.banned ? (
                                   <button
                                     onClick={() => handleBanUser(user.username)}
-                                    className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 dark:text-red-300 transition-colors'
+                                    disabled={pendingForUser !== null}
+                                    className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 dark:text-red-300 transition-colors disabled:cursor-wait disabled:opacity-60'
                                   >
-                                    封禁
+                                    {pendingForUser === 'ban' ? '处理中...' : '封禁'}
                                   </button>
                                 ) : (
                                   <button
                                     onClick={() =>
                                       handleUnbanUser(user.username)
                                     }
-                                    className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 dark:text-blue-200 transition-colors'
+                                    disabled={pendingForUser !== null}
+                                    className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 dark:text-blue-200 transition-colors disabled:cursor-wait disabled:opacity-60'
                                   >
-                                    解封
+                                    {pendingForUser === 'unban' ? '处理中...' : '解封'}
                                   </button>
                                 ))}
                             </>
@@ -414,9 +456,10 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                           {canDeleteUser && (
                             <button
                               onClick={() => handleDeleteUser(user.username)}
-                              className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 transition-colors'
+                              disabled={pendingForUser !== null}
+                              className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 transition-colors disabled:cursor-wait disabled:opacity-60'
                             >
-                              删除用户
+                              {pendingForUser === 'deleteUser' ? '删除中...' : '删除用户'}
                             </button>
                           )}
                         </td>
@@ -444,6 +487,7 @@ function UserConfigPageClient() {
       if (showLoading) {
         setLoading(true);
       }
+      setError(null);
 
       const response = await fetch(`/api/admin/config`);
 
@@ -493,7 +537,13 @@ function UserConfigPageClient() {
   }
 
   if (error) {
-    return null;
+    return (
+      <AdminLoadError
+        title='用户配置'
+        message={error}
+        onRetry={() => void fetchConfig(true)}
+      />
+    );
   }
 
   return (
@@ -517,7 +567,7 @@ function UserConfigPageClient() {
 
 export default function UserConfigPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoadingSkeleton variant='admin' />}>
       <UserConfigPageClient />
     </Suspense>
   );

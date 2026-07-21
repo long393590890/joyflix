@@ -171,7 +171,13 @@ function LoginPageClient() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className='flex min-h-screen items-center justify-center bg-black'>
+          <div className='h-96 w-[min(28rem,calc(100%-2rem))] animate-pulse rounded-3xl bg-gray-900' />
+        </div>
+      }
+    >
       <ThemeProvider forcedTheme="dark">
         <LoginPageClient />
       </ThemeProvider>

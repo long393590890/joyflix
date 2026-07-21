@@ -11,6 +11,7 @@ import {
   X,
   Moon,
   Search,
+  Loader2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -37,12 +38,14 @@ interface MenuItemProps {
   text: string;
   onClick: () => void;
   className?: string;
+  disabled?: boolean;
 }
 
-const MenuItem: FC<MenuItemProps> = ({ icon: Icon, text, onClick, className = '' }) => (
+const MenuItem: FC<MenuItemProps> = ({ icon: Icon, text, onClick, className = '', disabled = false }) => (
   <button
     onClick={onClick}
-    className={`w-full px-3 py-2 text-left flex items-center gap-3 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80 transition-colors text-sm rounded-md ${className}`}
+    disabled={disabled}
+    className={`w-full px-3 py-2 text-left flex items-center gap-3 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80 transition-colors text-sm rounded-md disabled:cursor-wait disabled:opacity-60 ${className}`}
   >
     <Icon className='w-4 h-4 text-zinc-500 dark:text-zinc-400' />
     <span className='font-medium'>{text}</span>
@@ -151,6 +154,7 @@ export const UserMenu: React.FC<{ className?: string }> = ({ className }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -244,6 +248,8 @@ export const UserMenu: React.FC<{ className?: string }> = ({ className }) => {
   const handleCloseMenu = () => setIsOpen(false);
 
   const handleLogout = async () => {
+    if (logoutLoading) return;
+    setLogoutLoading(true);
     try {
       await fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
     } catch (error) {
@@ -408,7 +414,13 @@ export const UserMenu: React.FC<{ className?: string }> = ({ className }) => {
           <MenuItem icon={Cog} text='应用设置' onClick={handleSettings} />
           {showAdminPanel && <MenuItem icon={Settings} text='后台设置' onClick={handleAdminPanel} />}
           {showChangePassword && <MenuItem icon={KeyRound} text='修改密码' onClick={handleChangePassword} />}
-          <MenuItem icon={LogOut} text='注销退出' onClick={handleLogout} className='text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20' />
+          <MenuItem
+            icon={logoutLoading ? Loader2 : LogOut}
+            text={logoutLoading ? '正在退出...' : '注销退出'}
+            onClick={handleLogout}
+            disabled={logoutLoading}
+            className={`${logoutLoading ? '[&_svg]:animate-spin' : ''} text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20`}
+          />
         </div>
       </motion.div>
     </>

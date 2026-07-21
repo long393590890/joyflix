@@ -31,7 +31,9 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 
 import { AdminConfig, AdminConfigResult } from '@/lib/admin.types';
+import AdminLoadError from '@/components/AdminLoadError';
 import PageLayout from '@/components/PageLayout';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
 
 // 统一弹窗方法
 const MySwal = Swal.mixin({
@@ -78,6 +80,8 @@ interface DataSource {
   from: 'config' | 'custom';
 }
 
+type SourceOperation = 'toggle' | 'delete' | 'add' | 'sort';
+
 // 视频源配置组件
 const VideoSourceConfig = ({
   config,
@@ -101,6 +105,10 @@ const VideoSourceConfig = ({
   const [testResults, setTestResults] = useState<Record<string, 'testing' | 'success' | 'failure' | null>>({});
   const [speeds, setSpeeds] = useState<Record<string, number | null>>({});
   const [testErrorMessages, setTestErrorMessages] = useState<Record<string, string | null>>({});
+  const [pendingOperation, setPendingOperation] = useState<{
+    key: string;
+    action: SourceOperation;
+  } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -143,44 +151,59 @@ const VideoSourceConfig = ({
     }
   };
 
-  const handleToggleEnable = (key: string) => {
+  const runSourceAction = async (
+    operation: { key: string; action: SourceOperation },
+    body: Record<string, any>
+  ): Promise<boolean> => {
+    if (pendingOperation) return false;
+    setPendingOperation(operation);
+    try {
+      await callSourceApi(body);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setPendingOperation(null);
+    }
+  };
+
+  const handleToggleEnable = async (key: string) => {
     const target = sources.find((s) => s.key === key);
     if (!target) return;
     const action = target.disabled ? 'enable' : 'disable';
-    callSourceApi({ action, key }).catch(() => {
-      console.error('操作失败', action, key);
-    });
+    await runSourceAction({ key, action: 'toggle' }, { action, key });
   };
 
-  const handleDelete = (key: string) => {
-    callSourceApi({ action: 'delete', key }).catch(() => {
-      console.error('操作失败', 'delete', key);
-    });
+  const handleDelete = async (key: string) => {
+    await runSourceAction(
+      { key, action: 'delete' },
+      { action: 'delete', key }
+    );
   };
 
-  const handleAddSource = () => {
+  const handleAddSource = async () => {
     if (!newSource.name || !newSource.key || !newSource.api) return;
-    callSourceApi({
-      action: 'add',
-      key: newSource.key,
-      name: newSource.name,
-      api: newSource.api,
-      detail: newSource.detail,
-    })
-      .then(() => {
-        setNewSource({
-          name: '',
-          key: '',
-          api: '',
-          detail: '',
-          disabled: false,
-          from: 'custom',
-        });
-        setShowAddForm(false);
-      })
-      .catch(() => {
-        console.error('操作失败', 'add', newSource);
+    const succeeded = await runSourceAction(
+      { key: newSource.key, action: 'add' },
+      {
+        action: 'add',
+        key: newSource.key,
+        name: newSource.name,
+        api: newSource.api,
+        detail: newSource.detail,
+      }
+    );
+    if (succeeded) {
+      setNewSource({
+        name: '',
+        key: '',
+        api: '',
+        detail: '',
+        disabled: false,
+        from: 'custom',
       });
+      setShowAddForm(false);
+    }
   };
 
   const handleDragEnd = (event: any) => {
@@ -192,16 +215,16 @@ const VideoSourceConfig = ({
     setOrderChanged(true);
   };
 
-  const handleSaveOrder = () => {
+  const handleSaveOrder = async () => {
     const order = sources.map((s) => s.key);
-    callSourceApi({ action: 'sort', order })
-      .then(() => {
-        setOrderChanged(false);
-        showSuccess('排序已保存！');
-      })
-      .catch(() => {
-        console.error('操作失败', 'sort', order);
-      });
+    const succeeded = await runSourceAction(
+      { key: '__order__', action: 'sort' },
+      { action: 'sort', order }
+    );
+    if (succeeded) {
+      setOrderChanged(false);
+      showSuccess('排序已保存！');
+    }
   };
 
   const testSingleSource = async (source: DataSource): Promise<{ speed: number, status: 'success' | 'failure' }> => {
@@ -357,19 +380,25 @@ const VideoSourceConfig = ({
         <td className='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2'>
           <button
             onClick={() => handleToggleEnable(source.key)}
+            disabled={pendingOperation !== null}
             className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${!source.disabled
                 ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60'
                 : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-900/60'
-              } transition-colors`}
+              } transition-colors disabled:cursor-wait disabled:opacity-60`}
           >
-            {!source.disabled ? '禁用' : '启用'}
+            {pendingOperation?.key === source.key && pendingOperation.action === 'toggle'
+              ? '处理中...'
+              : !source.disabled ? '禁用' : '启用'}
           </button>
           {source.from !== 'config' && (
             <button
               onClick={() => handleDelete(source.key)}
-              className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700/40 dark:hover:bg-gray-700/60 dark:text-gray-200 transition-colors'
+              disabled={pendingOperation !== null}
+              className='inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700/40 dark:hover:bg-gray-700/60 dark:text-gray-200 transition-colors disabled:cursor-wait disabled:opacity-60'
             >
-              删除
+              {pendingOperation?.key === source.key && pendingOperation.action === 'delete'
+                ? '删除中...'
+                : '删除'}
             </button>
           )}
         </td>
@@ -451,10 +480,20 @@ const VideoSourceConfig = ({
           <div className='flex justify-end'>
             <button
               onClick={handleAddSource}
-              disabled={!newSource.name || !newSource.key || !newSource.api}
+              disabled={
+                !newSource.name ||
+                !newSource.key ||
+                !newSource.api ||
+                pendingOperation !== null
+              }
               className='w-full sm:w-auto px-4 py-2 bg-blue-400 hover:bg-blue-500 disabled:bg-gray-400 text-white rounded-lg transition-colors'
             >
-              添加
+              {pendingOperation?.action === 'add' ? (
+                <span className='inline-flex items-center gap-2'>
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                  添加中...
+                </span>
+              ) : '添加'}
             </button>
           </div>
         </div>
@@ -513,9 +552,10 @@ const VideoSourceConfig = ({
         <div className='flex justify-end'>
           <button
             onClick={handleSaveOrder}
-            className='px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors'
+            disabled={pendingOperation !== null}
+            className='px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:cursor-wait disabled:opacity-60'
           >
-            保存排序
+            {pendingOperation?.action === 'sort' ? '保存中...' : '保存排序'}
           </button>
         </div>
       )}
@@ -533,6 +573,7 @@ function SourceConfigPageClient() {
       if (showLoading) {
         setLoading(true);
       }
+      setError(null);
 
       const response = await fetch(`/api/admin/config`);
 
@@ -579,7 +620,13 @@ function SourceConfigPageClient() {
   }
 
   if (error) {
-    return null;
+    return (
+      <AdminLoadError
+        title='接口配置'
+        message={error}
+        onRetry={() => void fetchConfig(true)}
+      />
+    );
   }
 
   return (
@@ -603,7 +650,7 @@ function SourceConfigPageClient() {
 
 export default function SourceConfigPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoadingSkeleton variant='admin' />}>
       <SourceConfigPageClient />
     </Suspense>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
 interface SearchSuggestionsProps {
   query: string;
@@ -23,6 +24,7 @@ export default function SearchSuggestions({
 }: SearchSuggestionsProps) {
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 防抖定时器
@@ -38,6 +40,7 @@ export default function SearchSuggestions({
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    setLoading(true);
 
     try {
       const response = await fetch(
@@ -80,6 +83,10 @@ export default function SearchSuggestions({
         setSuggestions([]);
         setSelectedIndex(-1);
       }
+    } finally {
+      if (abortControllerRef.current === controller) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -89,10 +96,14 @@ export default function SearchSuggestions({
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
       }
+      abortControllerRef.current?.abort();
+      setSuggestions([]);
+      setLoading(Boolean(searchQuery.trim() && isVisible));
       debounceTimer.current = setTimeout(() => {
         if (searchQuery.trim() && isVisible) {
           fetchSuggestionsFromAPI(searchQuery);
         } else {
+          setLoading(false);
           setSuggestions([]);
           setSelectedIndex(-1);
         }
@@ -103,6 +114,8 @@ export default function SearchSuggestions({
 
   useEffect(() => {
     if (!query.trim() || !isVisible) {
+      abortControllerRef.current?.abort();
+      setLoading(false);
       setSuggestions([]);
       setSelectedIndex(-1);
       return;
@@ -116,6 +129,10 @@ export default function SearchSuggestions({
       }
     };
   }, [query, isVisible, debouncedFetchSuggestions]);
+
+  useEffect(() => {
+    return () => abortControllerRef.current?.abort();
+  }, []);
 
   // 键盘导航
   useEffect(() => {
@@ -172,7 +189,7 @@ export default function SearchSuggestions({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isVisible, onClose]);
 
-  if (!isVisible || suggestions.length === 0) {
+  if (!isVisible || (!loading && suggestions.length === 0)) {
     return null;
   }
 
@@ -181,6 +198,12 @@ export default function SearchSuggestions({
       ref={containerRef}
       className='absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 max-h-80 overflow-y-auto'
     >
+      {loading && (
+        <div className='flex items-center justify-center gap-2 px-4 py-3 text-sm text-gray-500 dark:text-gray-400'>
+          <Loader2 className='h-4 w-4 animate-spin' aria-hidden='true' />
+          正在获取建议...
+        </div>
+      )}
       {suggestions.map((suggestion, index) => (
         <button
           key={`related-${suggestion.text}`}

@@ -42,6 +42,7 @@ interface EpisodeSelectorProps {
   availableSources?: SearchResult[];
   sourceSearchLoading?: boolean;
   sourceSearchError?: string | null;
+  sourceChanging?: boolean;
   /** 预计算的测速结果，避免重复测速 */
   precomputedVideoInfo?: Map<string, VideoInfo>;
 }
@@ -63,6 +64,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   availableSources = [],
   sourceSearchLoading = false,
   sourceSearchError = null,
+  sourceChanging = false,
   precomputedVideoInfo,
 }) => {
   const router = useRouter();
@@ -442,6 +444,13 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             </div>
           )}
 
+          {sourceChanging && !sourceSearchLoading && (
+            <div className='flex items-center justify-center py-3 text-sm text-gray-600 dark:text-gray-300'>
+              <span className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-400' />
+              正在切换线路...
+            </div>
+          )}
+
           {sourceSearchError && (
             <div className='flex items-center justify-center py-8'>
               <div className='text-center'>
@@ -490,13 +499,15 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                       <div
                         key={`${source.source}-${source.id}`}
                         onClick={() =>
-                          !isCurrentSource && handleSourceClick(source)
+                          !sourceChanging && !isCurrentSource && handleSourceClick(source)
                         }
                         className={`flex items-start gap-3 px-2 py-3 rounded-lg transition-all select-none duration-200 relative
                       ${
                         isCurrentSource
                           ? 'bg-blue-400/10 dark:bg-blue-400/20 border-blue-400/30 border'
-                          : 'hover:bg-gray-200/50 dark:hover:bg-white/10 hover:scale-[1.02] cursor-pointer'
+                          : sourceChanging
+                            ? 'cursor-wait opacity-60'
+                            : 'hover:bg-gray-200/50 dark:hover:bg-white/10 hover:scale-[1.02] cursor-pointer'
                       }`.trim()}
                       >
                         {/* 封面 */}

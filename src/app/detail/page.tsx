@@ -3,13 +3,14 @@
 
 'use client';
 
-import { Heart, PlayCircle, Star, Video } from 'lucide-react';
+import { Heart, Loader2, PlayCircle, Star, Video } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 
 import PageLayout from '@/components/PageLayout';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
 import RecommendationSection from '@/components/RecommendationSection';
 import CelebritiesSection from '@/components/CelebritiesSection';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
@@ -135,6 +136,7 @@ function DetailPageClient() {
 
   const [isFavorited, setIsFavorited] = useState(false);
   const [isFavoriting, setIsFavoriting] = useState(false); // 在异步操作期间禁用按钮时保留此状态
+  const [favoriteStatusLoading, setFavoriteStatusLoading] = useState(true);
   const [allFavorites, setAllFavorites] = useState<
     Awaited<ReturnType<typeof getAllFavorites>>
   >({});
@@ -150,11 +152,18 @@ function DetailPageClient() {
 
   // 在组件挂载和详情更改时检查收藏状态
   useEffect(() => {
-    if (!detail?.title) return;
+    if (!detail?.title) {
+      setFavoriteStatusLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setFavoriteStatusLoading(true);
 
     const fetchFavoriteStatus = async () => {
       try {
         const favorites = await getAllFavorites();
+        if (cancelled) return;
         setAllFavorites(favorites); // 将所有收藏存储在状态中
 
         // 检查是否有任何收藏具有相同的标题
@@ -165,6 +174,8 @@ function DetailPageClient() {
         setIsFavorited(isAlreadyFavoritedByTitle);
       } catch (err) {
         console.error('Failed to check favorite status', err);
+      } finally {
+        if (!cancelled) setFavoriteStatusLoading(false);
       }
     };
 
@@ -182,7 +193,10 @@ function DetailPageClient() {
       }
     );
 
-    return () => unsubscribe(); // 清理订阅
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [detail?.title]);
 
   useEffect(() => {
@@ -520,14 +534,19 @@ function DetailPageClient() {
                     flex items-center justify-center
                     w-10 h-10 rounded-full bg-transparent p-0
                   `}
-                  disabled={isFavoriting}
+                  disabled={isFavoriting || favoriteStatusLoading}
+                  aria-label={isFavorited ? '取消收藏' : '收藏'}
                 >
-                  <Heart
-                    size={24}
-                    className={`transition-all duration-300 ease-out ${
-                      isFavorited ? 'fill-red-500 stroke-red-500' : 'fill-transparent stroke-gray-600 dark:stroke-gray-300'
-                    }`}
-                  />
+                  {isFavoriting || favoriteStatusLoading ? (
+                    <Loader2 size={24} className='animate-spin text-gray-500 dark:text-gray-300' />
+                  ) : (
+                    <Heart
+                      size={24}
+                      className={`transition-all duration-300 ease-out ${
+                        isFavorited ? 'fill-red-500 stroke-red-500' : 'fill-transparent stroke-gray-600 dark:stroke-gray-300'
+                      }`}
+                    />
+                  )}
                 </button>
               )}
             </div>
@@ -594,14 +613,19 @@ function DetailPageClient() {
                 <button
                   onClick={handleFavorite}
                   className={`w-1/2 flex items-center justify-center gap-2 px-8 py-4 bg-gray-400 sm:${isFavorited ? 'bg-gray-300' : 'bg-gray-400'} bg-opacity-80 text-white font-bold rounded-lg shadow-lg active:bg-gray-300 transition-all duration-300 transform sm:w-14 sm:h-14 sm:rounded-full sm:px-0 sm:py-0 md:hover:bg-gray-400 md:hover:scale-105`}
-                  disabled={isFavoriting}
+                  disabled={isFavoriting || favoriteStatusLoading}
+                  aria-label={isFavorited ? '取消收藏' : '收藏'}
                 >
-                  <Heart
-                    size={24}
-                    className={`transition-all duration-300 ease-out ${
-                      isFavorited ? 'fill-red-500 stroke-red-500' : 'fill-transparent stroke-white'
-                    }`}
-                  />
+                  {isFavoriting || favoriteStatusLoading ? (
+                    <Loader2 size={24} className='animate-spin text-white' />
+                  ) : (
+                    <Heart
+                      size={24}
+                      className={`transition-all duration-300 ease-out ${
+                        isFavorited ? 'fill-red-500 stroke-red-500' : 'fill-transparent stroke-white'
+                      }`}
+                    />
+                  )}
                   <span className='sm:hidden whitespace-nowrap'>{isFavorited ? '已收藏' : '收藏'}</span>
                 </button>
               )}
@@ -683,7 +707,7 @@ function DetailPageClient() {
 export default function DetailPage({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
   const key = JSON.stringify(searchParams);
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoadingSkeleton variant='detail' />}>
       <DetailPageClient key={key} />
     </Suspense>
   );

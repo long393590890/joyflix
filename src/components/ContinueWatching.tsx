@@ -1,6 +1,6 @@
 'use client';
 /* eslint-disable no-console */
-import { Trash2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 
 import { useEffect, useState } from 'react';
 
@@ -23,6 +23,7 @@ export default function ContinueWatching({ className }: ContinueWatchingProps) {
     (PlayRecord & { key: string })[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   // 处理播放记录数据更新的函数
   const updatePlayRecords = (allRecords: Record<string, PlayRecord>) => {
@@ -106,14 +107,27 @@ export default function ContinueWatching({ className }: ContinueWatchingProps) {
         {!loading && playRecords.length > 0 && (
           <button
             onClick={async () => {
-              await clearAllPlayRecords();
-              setPlayRecords([]);
+              if (clearing) return;
+              setClearing(true);
+              try {
+                await clearAllPlayRecords();
+                setPlayRecords([]);
+              } finally {
+                setClearing(false);
+              }
             }}
+            disabled={clearing}
+            aria-label='清空播放记录'
+            className='disabled:cursor-wait disabled:opacity-60'
           >
-            <Trash2
-              size={20}
-              className='text-gray-500 dark:text-gray-400 transition-all duration-300 ease-out hover:stroke-red-500 hover:scale-[1.1]'
-            />
+            {clearing ? (
+              <Loader2 size={20} className='animate-spin text-gray-500 dark:text-gray-400' />
+            ) : (
+              <Trash2
+                size={20}
+                className='text-gray-500 dark:text-gray-400 transition-all duration-300 ease-out hover:stroke-red-500 hover:scale-[1.1]'
+              />
+            )}
           </button>
         )}
       </div>

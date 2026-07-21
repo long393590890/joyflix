@@ -7,6 +7,8 @@ import Swal from 'sweetalert2';
 
 import { AdminConfig, AdminConfigResult } from '@/lib/admin.types';
 import PageLayout from '@/components/PageLayout';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
+import AdminLoadError from '@/components/AdminLoadError';
 
 // 统一弹窗方法
 const MySwal = Swal.mixin({
@@ -234,6 +236,7 @@ function SiteConfigPageClient() {
       if (showLoading) {
         setLoading(true);
       }
+      setError(null);
 
       const response = await fetch(`/api/admin/config`);
 
@@ -287,7 +290,13 @@ function SiteConfigPageClient() {
   }
 
   if (error) {
-    return null;
+    return (
+      <AdminLoadError
+        title='站点配置'
+        message={error}
+        onRetry={() => void fetchConfig(true)}
+      />
+    );
   }
 
   return (
@@ -311,7 +320,7 @@ function SiteConfigPageClient() {
 
 export default function SiteConfigPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoadingSkeleton variant='admin' />}>
       <SiteConfigPageClient />
     </Suspense>
   );

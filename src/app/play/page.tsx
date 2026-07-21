@@ -4,6 +4,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
 import {
   deletePlayRecord,
@@ -20,6 +21,7 @@ import { getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
 
 import EpisodeSelector from '@/components/EpisodeSelector';
 import PageLayout from '@/components/PageLayout';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
 
 // 扩展 HTMLVideoElement 类型以支持 hls 属性
 declare global {
@@ -192,7 +194,7 @@ function PlayPageClient() {
   // 路线加载状态
   const [isVideoLoading, setIsVideoLoading] = useState(true);
   const [videoLoadingStage, setVideoLoadingStage] = useState<
-    'initing' | 'sourceChanging'
+    'initing' | 'sourceChanging' | 'episodeChanging'
   >('initing');
 
   // 播放进度保存相关
@@ -1440,6 +1442,8 @@ function PlayPageClient() {
     newId: string,
     newTitle: string
   ) => {
+    if (isVideoLoading && videoLoadingStage === 'sourceChanging') return;
+
     try {
       // 显示路线加载状态
       setVideoLoadingStage('sourceChanging');
@@ -1479,6 +1483,7 @@ function PlayPageClient() {
         (source) => source.source === newSource && source.id === newId
       );
       if (!newDetail) {
+        setIsVideoLoading(false);
         setError('未找到匹配结果');
         return;
       }
@@ -1551,7 +1556,11 @@ function PlayPageClient() {
       if (artPlayerRef.current && artPlayerRef.current.paused) {
         saveCurrentPlayProgress();
       }
-      setCurrentEpisodeIndex(episodeNumber);
+      if (episodeNumber !== currentEpisodeIndex) {
+        setVideoLoadingStage('episodeChanging');
+        setIsVideoLoading(true);
+        setCurrentEpisodeIndex(episodeNumber);
+      }
     }
   };
 
@@ -1585,6 +1594,8 @@ function PlayPageClient() {
       if (artPlayerRef.current && !artPlayerRef.current.paused) {
         saveCurrentPlayProgress();
       }
+      setVideoLoadingStage('episodeChanging');
+      setIsVideoLoading(true);
       setCurrentEpisodeIndex(idx - 1);
     }
   };
@@ -1596,6 +1607,8 @@ function PlayPageClient() {
       if (artPlayerRef.current && !artPlayerRef.current.paused) {
         saveCurrentPlayProgress();
       }
+      setVideoLoadingStage('episodeChanging');
+      setIsVideoLoading(true);
       setCurrentEpisodeIndex(idx + 1);
     }
   };
@@ -2281,6 +2294,8 @@ function PlayPageClient() {
         const idx = currentEpisodeIndexRef.current;
         if (d && d.episodes && idx < d.episodes.length - 1) {
           setTimeout(() => {
+            setVideoLoadingStage('episodeChanging');
+            setIsVideoLoading(true);
             setCurrentEpisodeIndex(idx + 1);
           }, 1000);
         }
@@ -2561,8 +2576,20 @@ function PlayPageClient() {
                   ref={artRef}
                   className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg'
                 ></div>
-
-                
+                {isVideoLoading && (
+                  <div className='absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-black/65 text-white backdrop-blur-[1px]'>
+                    <div className='flex items-center gap-3 rounded-lg bg-black/40 px-4 py-3'>
+                      <Loader2 className='h-6 w-6 animate-spin' aria-hidden='true' />
+                      <span className='text-sm font-medium'>
+                        {videoLoadingStage === 'sourceChanging'
+                          ? '正在切换线路...'
+                          : videoLoadingStage === 'episodeChanging'
+                            ? '正在切换集数...'
+                            : '正在准备播放器...'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2589,6 +2616,9 @@ function PlayPageClient() {
                 sourceSearchLoading={sourceSearchLoading}
                 sourceSearchError={sourceSearchError}
                 precomputedVideoInfo={precomputedVideoInfo}
+                sourceChanging={
+                  isVideoLoading && videoLoadingStage === 'sourceChanging'
+                }
               />
             </div>
           </div>
@@ -2685,7 +2715,7 @@ function PlayPageClient() {
 
 export default function PlayPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<PageLoadingSkeleton variant='play' />}>
       <PlayPageClient />
     </Suspense>
   );

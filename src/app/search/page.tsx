@@ -16,6 +16,7 @@ import { DoubanResult, SearchResult } from '@/lib/types';
 
 
 import PageLayout from '@/components/PageLayout';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
 import SearchSuggestions from '@/components/SearchSuggestions';
 import { useSite } from '@/components/SiteProvider';
 import VideoCard from '@/components/VideoCard';
@@ -536,7 +537,7 @@ const SearchPageClient: React.FC = () => {
 
 const SearchPage: React.FC = () => {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoadingSkeleton />}>
       <SearchPageClient />
     </Suspense>
   );

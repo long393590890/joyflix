@@ -1,13 +1,14 @@
 
 'use client';
 
-import { Settings, Users, FolderOpen, Video } from 'lucide-react';
+import { Settings, Users, FolderOpen, Loader2, Video } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 
 import { AdminConfigResult } from '@/lib/admin.types';
 import PageLayout from '@/components/PageLayout';
+import PageLoadingSkeleton from '@/components/PageLoadingSkeleton';
 
 // 统一弹窗方法
 const MySwal = Swal.mixin({
@@ -29,7 +30,7 @@ const MySwal = Swal.mixin({
 const showError = (message: string) => MySwal.fire({ icon: 'error', title: '错误', text: message });
 const showSuccess = (message: string) => MySwal.fire({ icon: 'success', title: '成功', text: message, timer: 4000, showConfirmButton: false });
 
-const AdminDashboard = ({ role, handleResetConfig }: { role: string | null, handleResetConfig: () => void }) => {
+const AdminDashboard = ({ role, handleResetConfig, resetting }: { role: string | null, handleResetConfig: () => void, resetting: boolean }) => {
   const menuItems = [
     {
       href: '/admin/site',
@@ -62,9 +63,11 @@ const AdminDashboard = ({ role, handleResetConfig }: { role: string | null, hand
                 {role === 'owner' && (
                   <button
                     onClick={handleResetConfig}
-                    className='px-2 py-1 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 hover:border-red-300 dark:border-red-800 dark:hover:border-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors'
+                    disabled={resetting}
+                    className='inline-flex items-center gap-1.5 px-2 py-1 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 hover:border-red-300 dark:border-red-800 dark:hover:border-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors disabled:cursor-wait disabled:opacity-60'
                   >
-                    重置
+                    {resetting && <Loader2 className='h-3.5 w-3.5 animate-spin' />}
+                    {resetting ? '重置中...' : '重置'}
                   </button>
                 )}
             </div>
@@ -99,6 +102,7 @@ const AdminDashboard = ({ role, handleResetConfig }: { role: string | null, hand
 function AdminDashboardClient() {
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -122,6 +126,7 @@ function AdminDashboardClient() {
   }, [fetchConfig]);
 
   const handleResetConfig = async () => {
+    if (resetting) return;
     const { isConfirmed } = await MySwal.fire({
       title: '确认恢复默认',
       text: '此操作将重置用户封禁和后台设置、自定义视频源，站点配置将重置为默认值，是否继续？',
@@ -132,6 +137,7 @@ function AdminDashboardClient() {
     });
     if (!isConfirmed) return;
 
+    setResetting(true);
     try {
       const response = await fetch(`/api/admin/reset`);
       if (!response.ok) {
@@ -140,6 +146,8 @@ function AdminDashboardClient() {
       showSuccess('重置成功，请刷新页面！');
     } catch (err) {
       showError(err instanceof Error ? err.message : '重置失败');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -158,12 +166,12 @@ function AdminDashboardClient() {
       )
   }
 
-  return <AdminDashboard role={role} handleResetConfig={handleResetConfig} />;
+  return <AdminDashboard role={role} handleResetConfig={handleResetConfig} resetting={resetting} />;
 }
 
 export default function AdminPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoadingSkeleton variant='admin' />}>
       <AdminDashboardClient />
     </Suspense>
   );
