@@ -155,10 +155,6 @@ export const config = {
       "api": "https://ckzy.me/api.php/provide/vod",
       "name": "CK资源"
     },
-    "xbzy": {
-      "api": "https://xingba111.com/api.php/provide/vod",
-      "name": "杏吧资源"
-    },
     "xinlang": {
       "api": "https://api.xinlangapi.com/xinlangapi.php/provide/vod",
       "name": "新浪资源"
