@@ -114,6 +114,150 @@ export const config = {
     "hn": {
       "api": "https://www.hongniuzy2.com/api.php/provide/vod",
       "name": "红牛资源"
+    },
+    "ffzy2": {
+      "api": "https://api.ffzyapi.com/api.php/provide/vod",
+      "name": "非凡资源2"
+    },
+    "wujin2": {
+      "api": "https://api.wujinapi.cc/api.php/provide/vod",
+      "name": "无尽资源2"
+    },
+    "wujin3": {
+      "api": "https://api.wujinapi.com/api.php/provide/vod",
+      "name": "无尽资源3"
+    },
+    "wujin4": {
+      "api": "https://api.wujinapi.net/api.php/provide/vod",
+      "name": "无尽资源4"
+    },
+    "zy360zz": {
+      "api": "https://360zyzz.com/api.php/provide/vod",
+      "name": "360资源2"
+    },
+    "yyzy": {
+      "api": "https://cj.yayazy.net/api.php/provide/vod",
+      "name": "丫丫点播"
+    },
+    "zy1080": {
+      "api": "https://api.1080zyku.com/inc/api_mac10.php",
+      "name": "1080资源"
+    },
+    "shenma": {
+      "api": "https://api.1080zyku.com/inc/apijson.php/",
+      "name": "神马云"
+    },
+    "uku2": {
+      "api": "https://api.ukuapi.com/api.php/provide/vod",
+      "name": "U酷资源2"
+    },
+    "ckzy": {
+      "api": "https://ckzy.me/api.php/provide/vod",
+      "name": "CK资源"
+    },
+    "xbzy": {
+      "api": "https://xingba111.com/api.php/provide/vod",
+      "name": "杏吧资源"
+    },
+    "xinlang": {
+      "api": "https://api.xinlangapi.com/xinlangapi.php/provide/vod",
+      "name": "新浪资源"
+    },
+    "nnzy": {
+      "api": "https://api.niuniuzy.me/api.php/provide/vod",
+      "name": "牛牛点播"
+    },
+    "xsdzy": {
+      "api": "https://xsd.sdzyapi.com/api.php/provide/vod",
+      "name": "索尼-闪电资源"
+    },
+    "hhzy": {
+      "api": "https://hhzyapi.com/api.php/provide/vod",
+      "name": "豪华资源"
+    },
+    "hn3": {
+      "api": "https://www.hongniuzy3.com/api.php/provide/vod",
+      "name": "红牛资源3"
+    },
+    "sb2": {
+      "api": "https://subocaiji.com/api.php/provide/vod",
+      "name": "速博资源2"
+    },
+    "sdzy": {
+      "api": "https://sdzyapi.com/api.php/provide/vod",
+      "name": "闪电资源"
+    },
+    "plzy": {
+      "api": "https://p2100.net/api.php/provide/vod",
+      "name": "飘零资源"
+    },
+    "lzi2": {
+      "api": "https://cj.lzcaiji.com/api.php/provide/vod",
+      "name": "量子资源2"
+    },
+    "modu": {
+      "api": "https://caiji.moduapi.cc/api.php/provide/vod",
+      "name": "魔都动漫"
+    },
+    "zuidazy": {
+      "api": "https://zuidazy.me/api.php/provide/vod",
+      "name": "最大点播"
+    },
+    "iqiyi": {
+      "api": "https://iqiyizyapi.com/api.php/provide/vod",
+      "name": "爱奇艺"
+    },
+    "yzzy": {
+      "api": "https://api.yzzy-api.com/inc/apijson.php",
+      "name": "优质资源"
+    },
+    "dbzy2": {
+      "api": "https://caiji.dbzy5.com/api.php/provide/vod",
+      "name": "豆瓣资源2"
+    },
+    "dbzy3": {
+      "api": "https://caiji.dbzy.tv/api.php/provide/vod",
+      "name": "豆瓣资源3"
+    },
+    "hhzyproxy": {
+      "api": "https://pz.v88.qzz.io/?url=https://hhzyapi.com/api.php/provide/vod",
+      "name": "豪华资源(代理)"
+    },
+    "aidan": {
+      "api": "https://pz.v88.qzz.io/?url=https://lovedan.net/api.php/provide/vod",
+      "name": "艾旦影视(代理)"
+    },
+    "ruyiproxy": {
+      "api": "https://pz.v88.qzz.io/?url=https://cj.rycjapi.com/api.php/provide/vod",
+      "name": "如意资源(代理)"
+    },
+    "bdzyproxy": {
+      "api": "https://pz.v88.qzz.io/?url=https://api.apibdzy.com/api.php/provide/vod",
+      "name": "百度云资源(代理)"
+    },
+    "wolong1": {
+      "api": "https://collect.wolongzyw.com/api.php/provide/vod",
+      "name": "卧龙点播"
+    },
+    "wolong": {
+      "api": "https://wolongzyw.com/api.php/provide/vod",
+      "name": "卧龙资源"
+    },
+    "wolong2": {
+      "api": "https://collect.wolongzy.cc/api.php/provide/vod",
+      "name": "卧龙资源2"
+    },
+    "wwzy2": {
+      "api": "https://api.wwzy.tv/api.php/provide/vod",
+      "name": "旺旺资源"
+    },
+    "jinying": {
+      "api": "https://jinyingzy.com/api.php/provide/vod",
+      "name": "金鹰点播"
+    },
+    "jy2": {
+      "api": "https://jyzyapi.com/api.php/provide/vod",
+      "name": "金鹰资源2"
     }
   },
   "custom_category": [
